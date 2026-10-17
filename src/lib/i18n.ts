@@ -133,6 +133,7 @@ const zh: Record<string, string> = {
   'compose.success': '主题已发布',
   'compose.loginRequired': '请先登录后再发布主题',
   'compose.markdownTip': '支持 Markdown',
+  'compose.image': '插入图片（点击选择，或直接粘贴 / 拖拽）',
   'compose.preview': '预览',
   'compose.write': '编写',
 
@@ -479,6 +480,7 @@ const en: Record<string, string> = {
   'compose.success': 'Topic published',
   'compose.loginRequired': 'Please sign in to publish a topic',
   'compose.markdownTip': 'Markdown supported',
+  'compose.image': 'Insert image (click, paste or drag & drop)',
   'compose.preview': 'Preview',
   'compose.write': 'Write',
 

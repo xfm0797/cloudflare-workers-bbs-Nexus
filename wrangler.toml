@@ -26,6 +26,13 @@ ALLOW_REGISTRATION = "true"
 # PBKDF2 迭代次数。免费版 Workers CPU 上限较低时可下调到 50000
 PASSWORD_ITERATIONS = "100000"
 
+# 外部图床（Sanyue ImgHub / CloudFlare-ImgBed 系）：编辑器里上传图片后自动插入 Markdown
+# 同时配置 IMGBED_AUTH_CODE（secret）才会启用；删掉本行则关闭图片上传入口
+IMGBED_URL = "https://img.lovou.eu.org"
+# IMGBED_FOLDER = "bbs"
+# IMGBED_CHANNEL = "telegram"
+# IMGBED_MAX_MB = "8"
+
 # 请求限流（Workers 原生 Rate Limiting binding，计数不经过 D1，也不花 Worker 额度）
 # 未登录访客 / 已登录用户 / 搜索 分别配额，按 IP 计数
 [[ratelimits]]
@@ -49,6 +56,7 @@ enabled = true
 # ---------------------------------------------------------------------------
 # 密钥请用 `wrangler secret put` 写入，切勿提交到仓库：
 #   SESSION_SECRET        必填，任意 32+ 位随机字符串
+#   IMGBED_AUTH_CODE      可选，图床认证码；配置后编辑器出现「插入图片」
 #   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
 #   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 #   GITLAB_CLIENT_ID / GITLAB_CLIENT_SECRET

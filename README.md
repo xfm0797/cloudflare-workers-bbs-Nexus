@@ -88,6 +88,30 @@ npx wrangler secret put SESSION_SECRET      # 必填，32 位以上随机串
 
 ---
 
+## 图床集成（编辑器上传图片）
+
+支持把外部图床（Sanyue ImgHub / CloudFlare-ImgBed 系，即提供 `POST /upload?authCode=` 接口的服务）接入编辑器：发帖与回复时**点击工具栏图片按钮、直接粘贴截图或拖拽图片**，自动上传并插入 `![文件名](图片直链)`。
+
+工作方式：浏览器只和本站的 `/api/upload` 通信，Worker 转发上传到图床——**认证码只存在服务端，不会暴露给前端**。同时要求登录、校验图片类型、限制单张大小（默认 8MB）与每人 30 张/10 分钟。
+
+配置（两项同时存在才会启用，缺一自动隐藏上传入口）：
+
+```toml
+# wrangler.toml [vars]
+IMGBED_URL = "https://img.lovou.eu.org"   # 图床根地址
+# IMGBED_FOLDER = "bbs"                   # 可选：上传目录
+# IMGBED_CHANNEL = "telegram"             # 可选：telegram / cfr2 / s3
+# IMGBED_MAX_MB = "8"                     # 可选：单张上限（MB）
+```
+
+```bash
+npx wrangler secret put IMGBED_AUTH_CODE   # 图后台设置的认证码
+```
+
+上传成功返回 `data[0].src`，相对路径会自动补全为图床绝对地址；图片域名已在 CSP `img-src https:` 白名单内，帖子内可直接渲染。
+
+---
+
 ## 部署
 
 ### 方式 A：一键部署（本地一条命令）

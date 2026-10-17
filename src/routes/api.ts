@@ -1,6 +1,8 @@
 import { get, post } from '../router';
 import { toggleBookmark, toggleLike, getTopic } from '../lib/db';
 import { renderMarkdown } from '../lib/markdown';
+import { imgbedConfig, uploadToImgbed } from '../lib/imgbed';
+import { clusterRateLimit, rateLimit } from '../lib/utils';
 import { errorPage } from '../views/pages';
 
 function wantsJson(ctx: { req: Request }): boolean {
@@ -46,6 +48,49 @@ post('/api/bookmark', async (ctx) => {
 post('/api/preview', async (ctx) => {
   const content = String(ctx.form?.get('content') || '').slice(0, 20000);
   return ctx.json({ ok: true, html: renderMarkdown(content) });
+});
+
+/**
+ * 图片上传：浏览器 → 本 Worker → 外部图床（认证码不出服务端）
+ * 返回 { ok, url, markdown }，前端直接把 markdown 插到光标处。
+ */
+post('/api/upload', async (ctx) => {
+  if (!ctx.user) return ctx.json({ ok: false, error: 'unauthorized' }, 401);
+
+  const config = imgbedConfig(ctx.env);
+  if (!config) return ctx.json({ ok: false, error: 'not_configured' }, 503);
+
+  const entry = ctx.form?.get('file');
+  const file = entry && typeof entry === 'object' && 'arrayBuffer' in entry ? (entry as File) : null;
+  if (!file || typeof file.size !== 'number' || file.size === 0) {
+    return ctx.json({ ok: false, error: 'no_file' }, 400);
+  }
+  if (file.size > config.maxBytes) {
+    return ctx.json({ ok: false, error: 'too_large', maxMb: config.maxMb }, 413);
+  }
+  if (!/^image\/(png|jpe?g|gif|webp|avif|svg\+xml|bmp|heic|heif)$/i.test(file.type || '')) {
+    return ctx.json({ ok: false, error: 'bad_type' }, 415);
+  }
+
+  // 每人 30 张 / 10 分钟（图床额度有限，防止被当成公共图床刷）
+  const key = `upload:${ctx.user.id}`;
+  let verdict: { ok: boolean; retryAfter: number };
+  try {
+    verdict = await clusterRateLimit(key, 30, 600);
+  } catch {
+    verdict = rateLimit(key, 30, 600_000);
+  }
+  if (!verdict.ok) {
+    return ctx.json({ ok: false, error: 'rate_limited', retryAfter: verdict.retryAfter }, 429);
+  }
+
+  const result = await uploadToImgbed(config, file);
+  if (!result.ok) {
+    return ctx.json({ ok: false, error: result.error }, result.status || 502);
+  }
+
+  const alt = (file.name || 'image').replace(/[[\]]/g, '').slice(0, 60);
+  return ctx.json({ ok: true, url: result.url, markdown: `![${alt}](${result.url})` });
 });
 
 post('/api/report', async (ctx) => {

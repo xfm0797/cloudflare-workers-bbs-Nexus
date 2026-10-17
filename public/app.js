@@ -256,7 +256,7 @@
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-markdown]');
     if (!btn) return;
-    var el = document.getElementById('content');
+    var el = btn.closest('form') ? btn.closest('form').querySelector('textarea') : document.getElementById('content');
     if (!el) return;
     e.preventDefault();
     var kind = btn.getAttribute('data-markdown');
@@ -264,6 +264,174 @@
     if (kind === 'code') wrapSelection(el, '`', '`');
     if (kind === 'quote') wrapSelection(el, '> ', '');
     if (kind === 'list') wrapSelection(el, '- ', '');
+  });
+
+  /* ---------------------------------------------------------------- image upload */
+
+  // 服务端上限见 IMGBED_MAX_MB，这里只做提前提示
+  var IMG_MAX_MB = 8;
+
+  function composerTarget(node) {
+    var form = node.closest('form');
+    return form ? form.querySelector('textarea') : document.getElementById('content');
+  }
+
+  function insertText(el, text) {
+    if (el.maxLength > 0 && el.value.length + text.length + 2 > el.maxLength) {
+      toast('内容超出长度上限 / Content too long', 'error');
+      return false;
+    }
+    var start = el.selectionStart == null ? el.value.length : el.selectionStart;
+    var end = el.selectionEnd == null ? el.value.length : el.selectionEnd;
+    var head = el.value.slice(0, start);
+    var tail = el.value.slice(end);
+    var lead = head && !/\n$/.test(head) ? '\n' : '';
+    var block = lead + text + '\n';
+    el.value = head + block + tail;
+    var pos = (head + block).length;
+    el.selectionStart = el.selectionEnd = pos;
+    el.dispatchEvent(new Event('input'));
+    el.focus();
+    return true;
+  }
+
+  function uploadErrorText(data) {
+    var map = {
+      unauthorized: '请先登录 / Please sign in',
+      not_configured: '图床未配置 / Image host not configured',
+      no_file: '没有选择文件 / No file selected',
+      too_large: '图片超过 ' + (data.maxMb || IMG_MAX_MB) + 'MB / Image too large',
+      bad_type: '仅支持图片 / Images only',
+      auth: '图床认证失败，请检查认证码 / Image host auth failed',
+      timeout: '上传超时，请重试 / Upload timed out',
+      rate_limited: '上传太频繁，请稍后再试 / Too many uploads',
+      upstream: '图床返回异常 / Image host error',
+    };
+    return map[data.error] || '上传失败 / Upload failed';
+  }
+
+  function uploadOne(file, el) {
+    if (!/^image\//.test(file.type || '')) {
+      toast('仅支持图片 / Images only', 'error');
+      return Promise.resolve();
+    }
+    if (file.size > IMG_MAX_MB * 1024 * 1024) {
+      toast('图片超过 ' + IMG_MAX_MB + 'MB / Image too large', 'error');
+      return Promise.resolve();
+    }
+    var fd = new FormData();
+    fd.append('file', file);
+    return fetch('/api/upload', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+      headers: { accept: 'application/json', 'x-csrf-token': csrf() },
+    })
+      .then(function (r) {
+        return r
+          .json()
+          .catch(function () {
+            return { ok: false, error: 'upstream' };
+          });
+      })
+      .then(function (data) {
+        if (!data.ok) {
+          toast(uploadErrorText(data), 'error');
+          return;
+        }
+        if (insertText(el, data.markdown || '![](' + data.url + ')')) {
+          toast('已插入图片 / Image inserted');
+        }
+      })
+      .catch(function () {
+        toast('上传失败，请检查网络 / Upload failed', 'error');
+      });
+  }
+
+  function uploadImages(files, el, btn) {
+    var list = [];
+    for (var i = 0; i < files.length; i++) {
+      if (files[i] && /^image\//.test(files[i].type || '')) list.push(files[i]);
+    }
+    if (!list.length) {
+      toast('仅支持图片 / Images only', 'error');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    toast(list.length > 1 ? '正在上传 ' + list.length + ' 张… / Uploading' : '正在上传… / Uploading');
+    // 串行上传，保证 markdown 顺序与选择顺序一致
+    var chain = Promise.resolve();
+    list.forEach(function (file) {
+      chain = chain.then(function () {
+        return uploadOne(file, el);
+      });
+    });
+    chain.then(function () {
+      if (btn) btn.disabled = false;
+    });
+  }
+
+  function pickImages(el, btn) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', function () {
+      var files = input.files || [];
+      uploadImages(files, el, btn);
+      input.remove();
+    });
+    input.click();
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-image-upload]');
+    if (!btn) return;
+    e.preventDefault();
+    var el = composerTarget(btn);
+    if (el) pickImages(el, btn);
+  });
+
+  // 粘贴 / 拖拽：只在带上传入口的编辑框上启用
+  document.querySelectorAll('form textarea').forEach(function (el) {
+    var form = el.closest('form');
+    var btn = form ? form.querySelector('[data-image-upload]') : null;
+    if (!btn) return;
+
+    el.addEventListener('paste', function (ev) {
+      var data = ev.clipboardData;
+      if (!data) return;
+      var files = [];
+      for (var i = 0; i < data.items.length; i++) {
+        var item = data.items[i];
+        if (item.kind === 'file') {
+          var f = item.getAsFile();
+          if (f && /^image\//.test(f.type || '')) files.push(f);
+        }
+      }
+      if (!files.length) return;
+      ev.preventDefault();
+      uploadImages(files, el, null);
+    });
+
+    el.addEventListener('dragover', function (ev) {
+      if (!ev.dataTransfer) return;
+      ev.preventDefault();
+      el.classList.add('is-drop');
+    });
+    el.addEventListener('dragleave', function () {
+      el.classList.remove('is-drop');
+    });
+    el.addEventListener('drop', function (ev) {
+      if (!ev.dataTransfer) return;
+      el.classList.remove('is-drop');
+      var files = ev.dataTransfer.files;
+      if (!files || !files.length) return;
+      ev.preventDefault();
+      uploadImages(files, el, null);
+    });
   });
 
   // 实时预览

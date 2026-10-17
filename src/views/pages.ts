@@ -5,6 +5,7 @@ import { escapeHtml as e } from '../lib/utils';
 import { avatar, catChip, csrfField, emptyState, icon, pagination, roleBadge, topicRow } from './ui';
 import { layout } from './layout';
 import { enabledProviders } from '../lib/oauth';
+import { imgbedEnabled } from '../lib/imgbed';
 
 /* ------------------------------------------------------------------ 首页 */
 
@@ -229,6 +230,13 @@ export function topicPage(
             ${avatar({ name: ctx.user.display_name, username: ctx.user.username, url: ctx.user.avatar_url, size: 32 })}
             <span>${e(ctx.t('topic.reply'))}</span>
             <span class="composer-hint">${icon('code', 13)}${e(ctx.t('compose.markdownTip'))}</span>
+            ${
+              imgbedEnabled(ctx.env)
+                ? `<button type="button" class="tool-btn composer-head-tool" data-image-upload title="${e(
+                    ctx.t('compose.image'),
+                  )}" aria-label="${e(ctx.t('compose.image'))}">${icon('image', 15)}</button>`
+                : ''
+            }
           </div>
           <div class="composer-quote" id="quoteBar" hidden>
             <span id="quoteText"></span>
@@ -401,6 +409,13 @@ export function composePage(ctx: Ctx, categories: Category[], presetCategory?: s
         <div class="label-row">
           <label class="label" for="content">${e(ctx.t('compose.contentLabel'))}</label>
           <div class="composer-tools">
+            ${
+              imgbedEnabled(ctx.env)
+                ? `<button type="button" class="tool-btn" data-image-upload title="${e(ctx.t('compose.image'))}" aria-label="${e(
+                    ctx.t('compose.image'),
+                  )}">${icon('image', 15)}</button>`
+                : ''
+            }
             <button type="button" class="tool-btn" data-markdown="bold" title="Bold">${icon('bold', 15)}</button>
             <button type="button" class="tool-btn" data-markdown="code" title="Code">${icon('code', 15)}</button>
             <button type="button" class="tool-btn" data-markdown="quote" title="Quote">${icon('quote', 15)}</button>

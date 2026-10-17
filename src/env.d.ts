@@ -17,6 +17,17 @@ export interface Env {
   /** 设为 off 可临时关闭应用层 bot 拦截（默认开启） */
   BOT_GUARD?: string;
 
+  /** 外部图床：根地址（如 https://img.lovou.eu.org），与 IMGBED_AUTH_CODE 同时配置才会启用上传 */
+  IMGBED_URL?: string;
+  /** 外部图床认证码（secret，切勿写进 wrangler.toml 的 vars） */
+  IMGBED_AUTH_CODE?: string;
+  /** 可选：上传渠道 telegram / cfr2 / s3 */
+  IMGBED_CHANNEL?: string;
+  /** 可选：上传目录，如 img/bbs */
+  IMGBED_FOLDER?: string;
+  /** 可选：单张图片大小上限（MB），默认 8 */
+  IMGBED_MAX_MB?: string;
+
   /** Workers 原生限流 binding（wrangler.toml 的 [[ratelimits]]），本地未配置时回退到 Cache 计数 */
   RL_PAGE?: RateLimitBinding;
   RL_USER?: RateLimitBinding;

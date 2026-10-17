@@ -2152,6 +2152,19 @@ select {
   background: var(--surface-3);
   color: var(--text);
 }
+.tool-btn[disabled] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.composer-head-tool {
+  margin-left: 4px;
+}
+.textarea.is-drop {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  outline: 2px dashed var(--primary);
+  outline-offset: -3px;
+}
 .preview-box {
   min-height: 180px;
   border: 1px dashed var(--border-strong);
