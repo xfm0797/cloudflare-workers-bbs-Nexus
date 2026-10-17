@@ -180,7 +180,7 @@ seed.sql                # 6 个初始板块
 | 搜索引擎（Googlebot、Bingbot、Baiduspider、YandexBot…） | 放行，但禁止访问 `/admin`、`/api/`、`/search` |
 | 社交预览（Twitterbot、TelegramBot、Discordbot、facebookexternalhit…） | 放行，分享卡片需要 |
 
-同一层还有匿名请求限流（单 isolate 内存桶）：页面 180 次/分/IP、`/api/` 120 次/分、`/search` 20 次/分。
+同一层还有匿名请求限流（用 Cache API 计数，跨 isolate 共享）：页面 180 次/分/IP、`/api/` 120 次/分、`/search` 20 次/分，超限返回 `429` + `Retry-After`。
 
 `robots.txt` 同时声明拒绝上述 AI 爬虫（双保险），并把 `/admin`、`/api/`、`/search`、`/notifications` 等排除在收录之外。
 

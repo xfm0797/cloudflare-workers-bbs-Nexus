@@ -187,3 +187,34 @@ export function formatBytes(n: number): string {
 }
 
 export { enc };
+
+/**
+ * 跨 isolate 的固定窗口限流：用 Cache API 计数（同一机房内共享），
+ * 比纯内存桶更可靠。失败时调用方回退到内存版 rateLimit()。
+ */
+export async function clusterRateLimit(
+  key: string,
+  limit: number,
+  windowSec: number,
+): Promise<{ ok: boolean; retryAfter: number }> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const bucket = Math.floor(nowSec / windowSec);
+  const cacheKey = new Request(`https://ratelimit.internal/${encodeURIComponent(key)}/${bucket}`);
+  const cache = caches.default;
+
+  let count = 0;
+  const hit = await cache.match(cacheKey);
+  if (hit) count = Number(await hit.text()) || 0;
+  count += 1;
+
+  const retryAfter = windowSec - (nowSec % windowSec);
+  if (count > limit) return { ok: false, retryAfter };
+
+  await cache.put(
+    cacheKey,
+    new Response(String(count), {
+      headers: { 'content-type': 'text/plain', 'cache-control': `max-age=${windowSec}` },
+    }),
+  );
+  return { ok: true, retryAfter: 0 };
+}

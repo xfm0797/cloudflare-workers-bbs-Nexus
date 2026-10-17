@@ -10,6 +10,7 @@ import {
   jsonResponse,
   parseCookies,
   rateLimit,
+  clusterRateLimit,
   redirectResponse,
   serializeCookie,
   uuid,
@@ -139,7 +140,13 @@ export default {
     if (path !== '/healthz') {
       const scope = path === '/search' ? 'search' : path.startsWith('/api/') ? 'api-get' : 'page';
       const limit = scope === 'search' ? 20 : scope === 'api-get' ? 120 : 180;
-      const hit = rateLimit(`g:${scope}:${clientIp(req)}`, limit, 60_000);
+      const key = `g:${scope}:${clientIp(req)}`;
+      let hit: { ok: boolean; retryAfter: number };
+      try {
+        hit = await clusterRateLimit(key, limit, 60);
+      } catch {
+        hit = rateLimit(key, limit, 60_000);
+      }
       if (!hit.ok) return withSecurityHeaders(tooManyRequests(hit.retryAfter));
     }
 
