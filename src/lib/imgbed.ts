@@ -25,6 +25,10 @@ export interface ImgbedConfig {
   maxBytes: number;
   /** 单张图片上限（MB，用于提示文案） */
   maxMb: number;
+  /** 是否交给图床做服务端压缩（默认关：部分渠道压缩会直接 400） */
+  serverCompress: boolean;
+  /** 是否让图床在失败时自动切换渠道重试（默认关：未配置渠道会合并成 500） */
+  autoRetry: boolean;
 }
 
 export const DEFAULT_MAX_MB = 8;
@@ -40,6 +44,7 @@ export function imgbedConfig(env: Env): ImgbedConfig | null {
   const normalized = (/^https?:\/\//i.test(base) ? base : `https://${base}`).replace(/\/+$/, '');
   const parsedMb = Number.parseInt((env.IMGBED_MAX_MB || '').trim(), 10);
   const maxMb = Number.isFinite(parsedMb) && parsedMb > 0 ? Math.min(parsedMb, 25) : DEFAULT_MAX_MB;
+  const on = (value?: string) => /^(1|true|yes|on)$/i.test((value || '').trim());
 
   return {
     base: normalized,
@@ -48,6 +53,8 @@ export function imgbedConfig(env: Env): ImgbedConfig | null {
     folder: (env.IMGBED_FOLDER || '').trim() || undefined,
     maxMb,
     maxBytes: maxMb * 1024 * 1024,
+    serverCompress: on(env.IMGBED_COMPRESS),
+    autoRetry: on(env.IMGBED_AUTO_RETRY),
   };
 }
 
@@ -108,6 +115,10 @@ export async function uploadToImgbed(config: ImgbedConfig, file: File): Promise<
   const url = new URL(`${config.base}/upload`);
   url.searchParams.set('authCode', config.authCode);
   url.searchParams.set('returnFormat', 'full');
+  // 默认关闭服务端压缩与自动切渠道：压缩在部分渠道会直接 400，
+  // 自动重试则会把未配置渠道的错误合并返回，明明上传成功却报 500。
+  if (!config.serverCompress) url.searchParams.set('serverCompress', 'false');
+  if (!config.autoRetry) url.searchParams.set('autoRetry', 'false');
   if (config.channel) url.searchParams.set('uploadChannel', config.channel);
   if (config.folder) url.searchParams.set('uploadFolder', config.folder);
 

@@ -27,6 +27,10 @@ export interface Env {
   IMGBED_FOLDER?: string;
   /** 可选：单张图片大小上限（MB），默认 8 */
   IMGBED_MAX_MB?: string;
+  /** 可选：设为 1 让图床做服务端压缩（默认关闭，部分渠道压缩会失败） */
+  IMGBED_COMPRESS?: string;
+  /** 可选：设为 1 允许图床失败时自动切换渠道重试（默认关闭） */
+  IMGBED_AUTO_RETRY?: string;
 
   /** Workers 原生限流 binding（wrangler.toml 的 [[ratelimits]]），本地未配置时回退到 Cache 计数 */
   RL_PAGE?: RateLimitBinding;

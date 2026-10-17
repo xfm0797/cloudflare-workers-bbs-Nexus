@@ -102,7 +102,11 @@ IMGBED_URL = "https://img.lovou.eu.org"   # 图床根地址
 # IMGBED_FOLDER = "bbs"                   # 可选：上传目录
 # IMGBED_CHANNEL = "telegram"             # 可选：telegram / cfr2 / s3
 # IMGBED_MAX_MB = "8"                     # 可选：单张上限（MB）
+# IMGBED_COMPRESS = "1"                   # 可选：交给图床压缩（默认关）
+# IMGBED_AUTO_RETRY = "1"                 # 可选：失败自动切渠道（默认关）
 ```
+
+> 默认会带上 `serverCompress=false&autoRetry=false`：前者在部分渠道会直接 400，后者会把未配置渠道的错误合并返回，出现「明明传上去了却报 500」。
 
 ```bash
 npx wrangler secret put IMGBED_AUTH_CODE   # 图后台设置的认证码

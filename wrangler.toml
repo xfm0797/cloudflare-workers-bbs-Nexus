@@ -32,6 +32,8 @@ IMGBED_URL = "https://img.lovou.eu.org"
 # IMGBED_FOLDER = "bbs"
 # IMGBED_CHANNEL = "telegram"
 # IMGBED_MAX_MB = "8"
+# IMGBED_COMPRESS = "1"     # 交给图床做服务端压缩（默认关闭，部分渠道压缩会 400）
+# IMGBED_AUTO_RETRY = "1"   # 上传失败时自动切渠道（默认关闭）
 
 # 请求限流（Workers 原生 Rate Limiting binding，计数不经过 D1，也不花 Worker 额度）
 # 未登录访客 / 已登录用户 / 搜索 分别配额，按 IP 计数
