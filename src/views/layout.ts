@@ -18,6 +18,8 @@ export interface LayoutOptions {
 
 const C = {
   brandMark: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8 8 0 0 1-8 8H7l-4 3V11.5a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg>`,
+  github: `<svg class="brand-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.23c0 4.51 2.87 8.34 6.84 9.7.5.09.68-.22.68-.49v-1.7c-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.1-1.5-1.1-1.5-.9-.63.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.88 1.55 2.3 1.1 2.86.84.09-.66.35-1.1.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.7 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.4.2 2.44.1 2.7.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9v2.82c0 .27.18.59.69.49A10.05 10.05 0 0 0 22 12.23C22 6.58 17.52 2 12 2Z"/></svg>`,
+  telegram: `<svg class="brand-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.8 19c-.2 1-.9 1.3-1.7.8l-4.7-3.5-2.3 2.2c-.3.3-.5.5-1 .5l.3-4.8 8.7-7.9c.4-.3-.1-.5-.6-.2L6.7 13.1l-4.6-1.4c-1-.3-1-1 .2-1.5l18-6.9c.8-.3 1.5.2 1.6 1Z"/></svg>`,
 };
 
 function langSwitch(ctx: Ctx): string {
@@ -115,6 +117,12 @@ export function footer(ctx: Ctx): string {
     <div class="footer-brand">
       <a class="brand" href="/"><span class="brand-mark">${C.brandMark}</span><span class="brand-name">${e(ctx.siteName)}</span></a>
       <p class="footer-desc">${e(ctx.t('footer.powered'))}</p>
+      <p class="footer-dev">
+        <span class="footer-dev-label">${e(ctx.t('footer.developer'))}</span>
+        <a class="footer-dev-link" href="https://www.lovou.pw" target="_blank" rel="noopener noreferrer" title="XFM">XFM</a>
+        <a class="footer-dev-link" href="https://github.com/xfm0797" target="_blank" rel="noopener noreferrer" title="GitHub · xfm0797">${C.github}<span>GitHub</span></a>
+        <a class="footer-dev-link" href="https://t.me/xfm520" target="_blank" rel="noopener noreferrer" title="Telegram · @xfm520">${C.telegram}<span>Telegram</span></a>
+      </p>
     </div>
     <div class="footer-col">
       <h4>${e(ctx.t('footer.community'))}</h4>

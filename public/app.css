@@ -1433,6 +1433,40 @@ select {
   max-width: 240px;
   line-height: 1.6;
 }
+.footer-dev {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.footer-dev-label {
+  color: var(--text-3);
+}
+.footer-dev-label::after {
+  content: ':';
+}
+.footer-dev-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+.footer-dev-link:hover {
+  color: var(--primary-text);
+}
+.footer-dev-link .brand-icon {
+  flex: none;
+  opacity: 0.85;
+}
+.footer-dev-link:hover .brand-icon {
+  opacity: 1;
+}
 .footer-col {
   display: flex;
   flex-direction: column;
