@@ -4,6 +4,11 @@ main = "src/index.ts"
 compatibility_date = "2025-09-01"
 workers_dev = true
 
+# 自定义域名（自动创建 DNS 记录与证书，国内可直连）
+[[routes]]
+pattern = "forum.lovou.pw"
+custom_domain = true
+
 # 静态资源（CSS/JS/图标）由 Workers Assets 直接返回，不消耗 Worker 调用
 [assets]
 directory = "./public"
@@ -11,7 +16,7 @@ directory = "./public"
 [[d1_databases]]
 binding = "DB"
 database_name = "cf-bbs"
-database_id = "00000000-0000-0000-0000-000000000000" # wrangler d1 create cf-bbs 后替换
+database_id = "4e6b0d5e-ddc9-47ff-a560-9f4dfec19354"
 migrations_dir = "migrations"
 
 [vars]
