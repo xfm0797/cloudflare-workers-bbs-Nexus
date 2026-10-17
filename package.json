@@ -1,0 +1,24 @@
+{
+  "name": "cf-bbs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A lightweight, high-performance forum community on Cloudflare Workers + D1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "wrangler d1 migrations apply cf-bbs --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cf-bbs --remote",
+    "db:seed": "wrangler d1 execute cf-bbs --local --file=./seed.sql",
+    "db:seed:remote": "wrangler d1 execute cf-bbs --remote --file=./seed.sql",
+    "db:reset": "rimraf .wrangler/state/v3/d1 && npm run db:migrate && npm run db:seed",
+    "demo": "node scripts/demo-data.mjs",
+    "shot": "node scripts/shot-mobile.cjs",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^3.78.0"
+  }
+}

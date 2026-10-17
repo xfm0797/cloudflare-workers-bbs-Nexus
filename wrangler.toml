@@ -1,0 +1,36 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "cf-bbs"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# 静态资源（CSS/JS/图标）由 Workers Assets 直接返回，不消耗 Worker 调用
+[assets]
+directory = "./public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cf-bbs"
+database_id = "00000000-0000-0000-0000-000000000000" # wrangler d1 create cf-bbs 后替换
+migrations_dir = "migrations"
+
+[vars]
+SITE_NAME = "Nexus"
+SITE_TAGLINE = "轻量 · 开放 · 属于你的社区"
+ALLOW_REGISTRATION = "true"
+# PBKDF2 迭代次数。免费版 Workers CPU 上限较低时可下调到 50000
+PASSWORD_ITERATIONS = "100000"
+
+[observability]
+enabled = true
+
+# ---------------------------------------------------------------------------
+# 密钥请用 `wrangler secret put` 写入，切勿提交到仓库：
+#   SESSION_SECRET        必填，任意 32+ 位随机字符串
+#   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
+#   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+#   GITLAB_CLIENT_ID / GITLAB_CLIENT_SECRET
+#   GITEE_CLIENT_ID  / GITEE_CLIENT_SECRET
+#   DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET
+#   OIDC_ISSUER / OIDC_CLIENT_ID / OIDC_CLIENT_SECRET / OIDC_NAME
+# ---------------------------------------------------------------------------
