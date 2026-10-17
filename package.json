@@ -8,6 +8,7 @@
     "deploy": "wrangler deploy",
     "ship": "node scripts/deploy.mjs",
     "ship:dry": "node scripts/deploy.mjs --dry-run",
+    "guard": "node scripts/edge-guard.mjs",
     "typecheck": "tsc --noEmit",
     "db:migrate": "wrangler d1 migrations apply cf-bbs --local",
     "db:migrate:remote": "wrangler d1 migrations apply cf-bbs --remote",
@@ -19,8 +20,8 @@
     "tail": "wrangler tail"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240909.0",
+    "@cloudflare/workers-types": "^5.20261016.1",
     "typescript": "^5.6.0",
-    "wrangler": "^3.78.0"
+    "wrangler": "^4.151.1"
   }
 }

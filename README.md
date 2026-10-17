@@ -229,32 +229,51 @@ seed.sql                # 6 个初始板块
 | 搜索引擎（Googlebot、Bingbot、Baiduspider、YandexBot…） | 放行，但禁止访问 `/admin`、`/api/`、`/search` |
 | 社交预览（Twitterbot、TelegramBot、Discordbot、facebookexternalhit…） | 放行，分享卡片需要 |
 
-同一层还有匿名请求限流（用 Cache API 计数，跨 isolate 共享）：页面 180 次/分/IP、`/api/` 120 次/分、`/search` 20 次/分，超限返回 `429` + `Retry-After`。
+同一层还有按 IP 的请求限流，用 **Workers 原生 Rate Limiting binding**（`wrangler.toml` 的 `[[ratelimits]]`，计数不经过 D1、不额外花 Worker 调用），超限返回 `429` + `Retry-After`：
+
+| 对象 | 配额 |
+|---|---|
+| 匿名访客（无 `bbs_sess`） | 40 次/分 |
+| 已登录用户 | 180 次/分 |
+| `/search` | 10 次/分 |
+
+> 页面里的 CSS/JS/图标走 Workers Assets，不经过 Worker，所以「40 次/分」实际约等于每分钟浏览 40 个页面，正常使用碰不到。
+> 本地开发没有 binding 时会自动回退到 Cache API / 内存桶（阈值同上，见 `src/index.ts`）。
 
 `robots.txt` 同时声明拒绝上述 AI 爬虫（双保险），并把 `/admin`、`/api/`、`/search`、`/notifications` 等排除在收录之外。
 
 需要临时放行（例如接监控探针）：`wrangler secret put BOT_GUARD` 写入 `off`，或在 `wrangler.toml` 的 `[vars]` 里设 `BOT_GUARD = "off"`。
 
-### 第 2 层：Bot Fight Mode（建议开启，边缘拦截不消耗 Worker 额度）
+### 第 2 层：Bot Fight Mode（已可通过脚本一键开启）
 
-Cloudflare 控制台 → 选择域名 → **Security → Bots** → 打开 **Bot Fight Mode**。
-所有已知 bot 会被边缘直接挑战/拦截，请求**不计入** Workers 调用数，是省钱最有效的一步。
+```bash
+CLOUDFLARE_API_TOKEN=xxx npm run guard            # 自动识别 wrangler.toml 里的域名
+CLOUDFLARE_API_TOKEN=xxx npm run guard -- --zone lovou.pw
+```
 
-### 第 3 层：限流规则（建议开启）
+`scripts/edge-guard.mjs` 会写入以下三项，**幂等**，可反复执行：
 
-**Security → WAF → Rate limiting rules** → Create rule：
+| 项目 | 配置 |
+|---|---|
+| Bot Fight Mode | 开启，同时开 JS Detections（免费版开 Fight Mode 的前置条件） |
+| AI 爬虫 | `ai_bots_protection = block` |
+| WAF 自定义规则 ×4 | 漏洞扫描路径 → Block；脚本客户端（curl/python-requests/Scrapy/sqlmap…）→ Block；AI 训练爬虫（GPTBot/CCBot/ClaudeBot/Bytespider…）→ Block；空 UA → 托管质询 |
+| 限流规则 ×1 | 同机房同 IP **10 秒 60 次** → `429`（豁免 `/app.css` `/app.js` `/favicon.svg`） |
 
-- 匹配：`http.request.uri.path ne "/app.css" and http.request.uri.path ne "/app.js"`
-- 计数特征：IP
-- 阈值：10 秒内 60 次请求
-- 动作：Block，持续时间 10 秒
+Token 权限：**Zone → Zone WAF:Edit、Bot Management:Edit、Zone:Read**。
+这层在 Cloudflare 边缘执行，命中后请求根本不进 Worker，**不消耗调用额度**，是省钱最有效的一步。
 
-免费版可建 1 条规则，足够挡住单 IP 的高频抓取。
+> **实测结论（2026-10，Free 套餐）**：Bot Fight Mode、AI 爬虫阻断、4 条 WAF 自定义规则全部生效（curl / GPTBot / 扫描路径均返回 Cloudflare 的 403 拦截页）。
+> 但 **Rate limiting rules 在该免费账户上写入成功、边缘却不执行**（连 `expression: "true"` 的最简规则也不触发），
+> 因此限流实际由第 1 层的 Workers Rate Limiting binding 承担，边缘那条规则只作配置备份保留。
+> 若换成 Pro 及以上套餐，用 `npm run guard -- --limit 100 --window 10` 调整后重跑即可。
 
-### 用量监控
+也可以手动在控制台配：**Security → Bots** 打开 Bot Fight Mode；**Security → WAF → Custom rules** 按上表填写。
+
+### 第 3 层：用量监控与调优
 
 Workers & Pages → `cf-bbs` → Metrics 查看请求数与 CPU；D1 → `cf-bbs` → Metrics 查看行读/行写。
-若某天请求数异常飙升，先在 **Security → Events** 里按 UA / 路径筛选，再把新的 UA 关键词补进 `botguard.ts` 的正则。
+若某天请求数异常飙升，先在 **Security → Events** 里按 UA / 路径筛选，再把新的 UA 关键词补进 `scripts/edge-guard.mjs` 的规则与 `src/lib/botguard.ts` 的正则，重新执行 `npm run guard` 即可。
 
 ## 常用命令
 
@@ -263,6 +282,7 @@ Workers & Pages → `cf-bbs` → Metrics 查看请求数与 CPU；D1 → `cf-bbs
 | `npm run dev` | 本地开发（含本地 D1） |
 | `npm run ship` | **一键部署**（建库 → 密钥 → 迁移 → 种子 → 校验 → 发布 → 健康检查） |
 | `npm run ship:dry` | 一键部署的演练模式，只打包不发布 |
+| `npm run guard` | **配置 Cloudflare 边缘防护**（Bot Fight Mode / WAF / 限流），需 `CLOUDFLARE_API_TOKEN` |
 | `npm run typecheck` | TypeScript 严格模式校验 |
 | `npm run db:migrate` | 应用迁移（加 `:remote` 为线上） |
 | `npm run db:seed` | 写入初始板块 |
@@ -275,6 +295,8 @@ Workers & Pages → `cf-bbs` → Metrics 查看请求数与 CPU；D1 → `cf-bbs
 - `.dev.vars` 中设置 `DEV_LOGIN=1` 后，可访问 `/dev/login/:username` 免密登录（线上不设置该变量，路由恒为 404）
 - `scripts/shot-mobile.cjs`：通过 CDP 设备模拟截取任意宽度的移动端截图
   （`node scripts/shot-mobile.cjs <url> <out.png> <width> <height>`，加 `DARK=1` 截暗色）
+- `scripts/ratelimit-check.cjs`：用真实浏览器内核连打某个路径，统计状态码分布，验证限流是否生效
+  （`node scripts/ratelimit-check.cjs "https://your.site/" 60 80` = 60 次、间隔 80ms）
 
 ## License
 

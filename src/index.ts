@@ -136,18 +136,37 @@ export default {
     const guarded = guardRequest(req, env);
     if (guarded) return withSecurityHeaders(guarded);
 
-    // 第二道闸：匿名请求的粗粒度限流（单 isolate 内存桶，边缘层规则见 README）
+    // 第二道闸：请求限流
+    // 优先用 Workers 原生 Rate Limiting binding（计数强一致、不碰 D1）；
+    // 本地开发没有该 binding 时，回退到 Cache API / 内存桶。
     if (path !== '/healthz') {
       const scope = path === '/search' ? 'search' : path.startsWith('/api/') ? 'api-get' : 'page';
-      const limit = scope === 'search' ? 20 : scope === 'api-get' ? 120 : 180;
-      const key = `g:${scope}:${clientIp(req)}`;
-      let hit: { ok: boolean; retryAfter: number };
-      try {
-        hit = await clusterRateLimit(key, limit, 60);
-      } catch {
-        hit = rateLimit(key, limit, 60_000);
+      const signedIn = !!getCookie(req, 'bbs_sess');
+      const ip = clientIp(req);
+      const key = `${signedIn ? 'u' : 'a'}:${ip}`;
+      // 与 wrangler.toml 的 [[ratelimits]] 保持一致：匿名 40、登录 180、搜索 10（每分钟）
+      const fallbackLimits = signedIn
+        ? { search: 20, 'api-get': 120, page: 180 }
+        : { search: 10, 'api-get': 30, page: 40 };
+      const binding = scope === 'search' ? env.RL_SEARCH : signedIn ? env.RL_USER : env.RL_PAGE;
+
+      let verdict: { ok: boolean; retryAfter: number } | null = null;
+      if (binding && typeof binding.limit === 'function') {
+        try {
+          const res = await binding.limit({ key });
+          verdict = { ok: res.success, retryAfter: 60 };
+        } catch {
+          verdict = null;
+        }
       }
-      if (!hit.ok) return withSecurityHeaders(tooManyRequests(hit.retryAfter));
+      if (!verdict) {
+        try {
+          verdict = await clusterRateLimit(`g:${scope}:${key}`, fallbackLimits[scope], 60);
+        } catch {
+          verdict = rateLimit(`g:${scope}:${key}`, fallbackLimits[scope], 60_000);
+        }
+      }
+      if (!verdict.ok) return withSecurityHeaders(tooManyRequests(verdict.retryAfter));
     }
 
     if (path === '/healthz') {

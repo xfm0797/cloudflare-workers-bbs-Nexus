@@ -26,6 +26,23 @@ ALLOW_REGISTRATION = "true"
 # PBKDF2 迭代次数。免费版 Workers CPU 上限较低时可下调到 50000
 PASSWORD_ITERATIONS = "100000"
 
+# 请求限流（Workers 原生 Rate Limiting binding，计数不经过 D1，也不花 Worker 额度）
+# 未登录访客 / 已登录用户 / 搜索 分别配额，按 IP 计数
+[[ratelimits]]
+name = "RL_PAGE"
+namespace_id = "1001"
+simple = { limit = 40, period = 60 }
+
+[[ratelimits]]
+name = "RL_USER"
+namespace_id = "1002"
+simple = { limit = 180, period = 60 }
+
+[[ratelimits]]
+name = "RL_SEARCH"
+namespace_id = "1003"
+simple = { limit = 10, period = 60 }
+
 [observability]
 enabled = true
 
