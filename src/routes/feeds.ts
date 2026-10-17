@@ -76,12 +76,53 @@ ${urls.join('\n')}
 });
 
 get('/robots.txt', (ctx) => {
-  const body = `User-agent: *
+  // 明确拒绝的 AI 训练 / 商业采集爬虫（应用层同样会直接 403，这里是双保险）
+  const blockedBots = [
+    'GPTBot',
+    'ChatGPT-User',
+    'OAI-SearchBot',
+    'CCBot',
+    'ClaudeBot',
+    'anthropic-ai',
+    'Google-Extended',
+    'Bytespider',
+    'Amazonbot',
+    'Applebot-Extended',
+    'meta-externalagent',
+    'PerplexityBot',
+    'Diffbot',
+    'omgili',
+    'Timpibot',
+    'ImagesiftBot',
+    'cohere-ai',
+    'AhrefsBot',
+    'SemrushBot',
+    'MJ12bot',
+    'DotBot',
+    'DataForSeoBot',
+    'BLEXBot',
+    'SeznamBot',
+    'PetalBot',
+    'YisouSpider',
+    'Scrapy',
+  ];
+  const blocked = blockedBots.map((bot) => `User-agent: ${bot}\nDisallow: /\n`).join('\n');
+
+  const body = `# 搜索引擎
+User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /settings
 Disallow: /api/
+Disallow: /search
+Disallow: /new
+Disallow: /notifications
+Disallow: /bookmarks
+Disallow: /login
+Disallow: /register
 
+# AI 训练 / 商业采集爬虫
+${blocked}
 Sitemap: ${ctx.url.origin}/sitemap.xml
 `;
   return new Response(body, {

@@ -9,6 +9,8 @@ export interface Env {
   ALLOW_REGISTRATION?: string;
   DEV_LOGIN?: string;
   PASSWORD_ITERATIONS?: string;
+  /** 设为 off 可临时关闭应用层 bot 拦截（默认开启） */
+  BOT_GUARD?: string;
 
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;

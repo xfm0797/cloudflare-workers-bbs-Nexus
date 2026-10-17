@@ -163,6 +163,50 @@ seed.sql                # 6 个初始板块
 - 举报入口在每条回复的操作区，处理结果在「后台 → 举报」
 - 版主只能处理举报与内容版务；用户/板块/站点设置仅管理员可见
 
+## 防爬虫与额度保护
+
+免费版 Workers（10 万请求/天）和 D1（500 万行读/天）很容易被采集器、AI 训练爬虫和漏洞扫描器吃掉。本项目做了三层防护，**第一层在代码里已经生效，第二、三层需要在 Cloudflare 后台点一下**。
+
+### 第 1 层：应用层拦截（已内置，`src/lib/botguard.ts`）
+
+请求进入路由和数据库之前先过 `guardRequest()`，命中即返回 `403`，**不产生任何 D1 查询**：
+
+| 规则 | 处理 |
+| --- | --- |
+| AI 训练 / 商业采集爬虫（GPTBot、CCBot、ClaudeBot、Bytespider、AhrefsBot、SemrushBot、MJ12bot…） | 直接 403 |
+| 脚本客户端（curl、python-requests、Go-http-client、Scrapy、HeadlessChrome、sqlmap、nuclei…） | 直接 403 |
+| 空 User-Agent | 直接 403 |
+| 漏洞扫描路径（`/wp-login.php`、`/.env`、`/.git`、`/phpmyadmin`、`/actuator`…） | 直接 403 |
+| 搜索引擎（Googlebot、Bingbot、Baiduspider、YandexBot…） | 放行，但禁止访问 `/admin`、`/api/`、`/search` |
+| 社交预览（Twitterbot、TelegramBot、Discordbot、facebookexternalhit…） | 放行，分享卡片需要 |
+
+同一层还有匿名请求限流（单 isolate 内存桶）：页面 180 次/分/IP、`/api/` 120 次/分、`/search` 20 次/分。
+
+`robots.txt` 同时声明拒绝上述 AI 爬虫（双保险），并把 `/admin`、`/api/`、`/search`、`/notifications` 等排除在收录之外。
+
+需要临时放行（例如接监控探针）：`wrangler secret put BOT_GUARD` 写入 `off`，或在 `wrangler.toml` 的 `[vars]` 里设 `BOT_GUARD = "off"`。
+
+### 第 2 层：Bot Fight Mode（建议开启，边缘拦截不消耗 Worker 额度）
+
+Cloudflare 控制台 → 选择域名 → **Security → Bots** → 打开 **Bot Fight Mode**。
+所有已知 bot 会被边缘直接挑战/拦截，请求**不计入** Workers 调用数，是省钱最有效的一步。
+
+### 第 3 层：限流规则（建议开启）
+
+**Security → WAF → Rate limiting rules** → Create rule：
+
+- 匹配：`http.request.uri.path ne "/app.css" and http.request.uri.path ne "/app.js"`
+- 计数特征：IP
+- 阈值：10 秒内 60 次请求
+- 动作：Block，持续时间 10 秒
+
+免费版可建 1 条规则，足够挡住单 IP 的高频抓取。
+
+### 用量监控
+
+Workers & Pages → `cf-bbs` → Metrics 查看请求数与 CPU；D1 → `cf-bbs` → Metrics 查看行读/行写。
+若某天请求数异常飙升，先在 **Security → Events** 里按 UA / 路径筛选，再把新的 UA 关键词补进 `botguard.ts` 的正则。
+
 ## 常用命令
 
 | 命令 | 说明 |

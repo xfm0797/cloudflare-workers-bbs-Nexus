@@ -15,6 +15,7 @@ import {
   uuid,
 } from './lib/utils';
 import { dispatch } from './router';
+import { guardRequest, tooManyRequests } from './lib/botguard';
 import { errorPage } from './views/pages';
 
 // 路由注册（副作用导入）
@@ -127,6 +128,20 @@ export default {
 
     // 静态资源由 Assets 处理，这里只兜底 favicon
     if (path === '/favicon.ico') return redirectResponse('/favicon.svg', [], 301);
+
+    // ------------------------------------------------------------------
+    // 第一道闸：bot / 爬虫 / 扫描器拦截（在路由与数据库之前，避免额度消耗）
+    // ------------------------------------------------------------------
+    const guarded = guardRequest(req, env);
+    if (guarded) return withSecurityHeaders(guarded);
+
+    // 第二道闸：匿名请求的粗粒度限流（单 isolate 内存桶，边缘层规则见 README）
+    if (path !== '/healthz') {
+      const scope = path === '/search' ? 'search' : path.startsWith('/api/') ? 'api-get' : 'page';
+      const limit = scope === 'search' ? 20 : scope === 'api-get' ? 120 : 180;
+      const hit = rateLimit(`g:${scope}:${clientIp(req)}`, limit, 60_000);
+      if (!hit.ok) return withSecurityHeaders(tooManyRequests(hit.retryAfter));
+    }
 
     if (path === '/healthz') {
       return jsonResponse({ ok: true, ts: Date.now() });
