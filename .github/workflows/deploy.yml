@@ -1,0 +1,111 @@
+name: Deploy
+
+# 一键部署：推送到 main 自动发布；也可在 Actions 页面点 "Run workflow" 手动触发
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.gitignore'
+      - '.workbuddy/**'
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: '应用 D1 数据库迁移'
+        type: boolean
+        default: true
+      run_seed:
+        description: '写入初始板块（幂等，可重复执行）'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Verify credentials
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error title=缺少密钥::请在 Settings → Secrets and variables → Actions 添加 CLOUDFLARE_API_TOKEN"
+            exit 1
+          fi
+          echo "使用 Cloudflare API Token 部署（account: ${CLOUDFLARE_ACCOUNT_ID:-自动}）"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # fork 后想用自己的 D1：设置仓库变量 D1_DATABASE_ID 即可覆盖 wrangler.toml
+      - name: Override D1 database id
+        if: ${{ vars.D1_DATABASE_ID != '' }}
+        run: |
+          sed -i -E "s/database_id = \".*\"/database_id = \"${{ vars.D1_DATABASE_ID }}\"/" wrangler.toml
+          grep -n "database_id" wrangler.toml
+
+      - name: Apply D1 migrations
+        if: ${{ github.event_name == 'push' || inputs.run_migrations }}
+        run: npx wrangler d1 migrations apply cf-bbs --remote
+
+      - name: Seed categories
+        if: ${{ inputs.run_seed }}
+        run: npx wrangler d1 execute cf-bbs --remote --file=./seed.sql --yes
+
+      - name: Sync SESSION_SECRET
+        if: ${{ secrets.SESSION_SECRET != '' }}
+        env:
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+        run: printf '%s' "$SESSION_SECRET" | npx wrangler secret put SESSION_SECRET
+
+      - name: Deploy worker
+        id: deploy
+        run: |
+          set -o pipefail
+          npx wrangler deploy 2>&1 | tee deploy.log
+          URL=$(grep -oE 'https://[a-zA-Z0-9._/-]+' deploy.log | grep -v 'workers.dev' | head -1 || true)
+          if [ -z "$URL" ]; then
+            URL=$(grep -oE 'https://[a-zA-Z0-9._-]+\.workers\.dev' deploy.log | head -1 || true)
+          fi
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+          echo "### 已发布 ${URL}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test
+        if: ${{ steps.deploy.outputs.url != '' }}
+        run: |
+          URL="${{ steps.deploy.outputs.url }}"
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+          for i in 1 2 3 4 5; do
+            CODE=$(curl -s -o /tmp/health.txt -w '%{http_code}' -A "$UA" -m 20 "$URL/healthz" || true)
+            if [ "$CODE" = "200" ]; then
+              echo "健康检查通过：$URL/healthz → $CODE"
+              echo "- 健康检查: $CODE $(cat /tmp/health.txt | head -c 80)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "第 $i 次探测返回 $CODE，5 秒后重试"
+            sleep 5
+          done
+          echo "::warning::健康检查未通过（可能是证书签发或 DNS 尚未生效）"
+          exit 0

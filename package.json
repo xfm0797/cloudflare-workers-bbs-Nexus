@@ -6,12 +6,14 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "ship": "node scripts/deploy.mjs",
+    "ship:dry": "node scripts/deploy.mjs --dry-run",
     "typecheck": "tsc --noEmit",
     "db:migrate": "wrangler d1 migrations apply cf-bbs --local",
     "db:migrate:remote": "wrangler d1 migrations apply cf-bbs --remote",
     "db:seed": "wrangler d1 execute cf-bbs --local --file=./seed.sql",
     "db:seed:remote": "wrangler d1 execute cf-bbs --remote --file=./seed.sql",
-    "db:reset": "rimraf .wrangler/state/v3/d1 && npm run db:migrate && npm run db:seed",
+    "db:reset": "node -e \"require('fs').rmSync('.wrangler/state/v3/d1',{recursive:true,force:true})\" && npm run db:migrate && npm run db:seed",
     "demo": "node scripts/demo-data.mjs",
     "shot": "node scripts/shot-mobile.cjs",
     "tail": "wrangler tail"

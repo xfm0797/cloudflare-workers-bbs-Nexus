@@ -90,6 +90,55 @@ npx wrangler secret put SESSION_SECRET      # 必填，32 位以上随机串
 
 ## 部署
 
+### 方式 A：一键部署（本地一条命令）
+
+```bash
+npx wrangler login   # 只需第一次
+npm run ship
+```
+
+`scripts/deploy.mjs` 会串起整条链路，任何一步失败立即停下并打印真实错误：
+
+1. 检查依赖与 Cloudflare 登录态
+2. `wrangler.toml` 里 `database_id` 仍是占位值时，自动 `d1 create` 并写回
+3. 首次部署自动生成 48 字节随机 `SESSION_SECRET` 并写入（已存在则不动，不会让现有会话失效）
+4. 应用 D1 迁移（无变更自动跳过）
+5. 写入初始板块（`INSERT OR IGNORE`，可重复执行）
+6. TypeScript 严格校验 → `wrangler deploy`
+7. 轮询 `/healthz` 确认线上可用，并输出站点与后台地址
+
+常用参数：
+
+| 命令 | 作用 |
+|---|---|
+| `npm run ship` | 完整部署 |
+| `npm run ship -- --skip-seed` | 不动板块数据（日常发布最常用） |
+| `npm run ship -- --skip-migrate` | 跳过数据库迁移 |
+| `npm run ship:dry` | 只打包校验，不真正发布 |
+| `npm run ship -- --rotate-secret` | 强制轮换 `SESSION_SECRET`（会让所有已登录用户下线） |
+| `npm run ship -- --yes` | 全程不询问（CI / 定时任务） |
+
+> 密钥处理是保守的：只有确认线上**没有** `SESSION_SECRET` 时才自动生成写入；查询失败会跳过并提示，绝不会因为一次网络抖动把全员登出。
+
+### 方式 B：GitHub Actions（推送即部署）
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/xfm0797/cloudflare-workers-bbs-Nexus)
+
+仓库已带 `.github/workflows/deploy.yml`：**push 到 `main` 自动发布**，也可以在 Actions 页面点 **Run workflow** 手动触发（可勾选是否迁移、是否写入初始板块）。
+
+首次启用需在仓库 `Settings → Secrets and variables → Actions` 配置：
+
+| 类型 | 名称 | 说明 |
+|---|---|---|
+| Secret | `CLOUDFLARE_API_TOKEN` | **必填**。Cloudflare 后台创建，权限：`Workers Scripts:Edit`、`D1:Edit`、`Account Settings:Read` |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | 可选，账号 ID（多账号时建议填） |
+| Secret | `SESSION_SECRET` | 可选，填了则每次部署同步会话密钥（不填则沿用线上已有值） |
+| Variable | `D1_DATABASE_ID` | 可选，fork 后用自己的数据库时覆盖 `wrangler.toml` 里的 id |
+
+> 用别人的仓库部署自己的站：先 Fork → 改 `wrangler.toml` 的 `name` 与 `routes`（或删掉 `[[routes]]` 用 workers.dev 域名）→ 按上表配好密钥 → 点 Run workflow。
+
+### 方式 C：手动分步
+
 1. **创建 D1**
 
    ```bash
@@ -212,11 +261,13 @@ Workers & Pages → `cf-bbs` → Metrics 查看请求数与 CPU；D1 → `cf-bbs
 | 命令 | 说明 |
 | --- | --- |
 | `npm run dev` | 本地开发（含本地 D1） |
+| `npm run ship` | **一键部署**（建库 → 密钥 → 迁移 → 种子 → 校验 → 发布 → 健康检查） |
+| `npm run ship:dry` | 一键部署的演练模式，只打包不发布 |
 | `npm run typecheck` | TypeScript 严格模式校验 |
 | `npm run db:migrate` | 应用迁移（加 `:remote` 为线上） |
 | `npm run db:seed` | 写入初始板块 |
 | `npm run demo` | 本地灌入演示数据（2 个用户 + 3 个主题 + 回复点赞） |
-| `npm run deploy` | 发布到 Cloudflare |
+| `npm run deploy` | 仅发布 Worker（不含建库/迁移） |
 | `npm run tail` | 实时查看线上日志 |
 
 ## 本地调试小工具
