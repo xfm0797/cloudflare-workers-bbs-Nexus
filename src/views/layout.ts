@@ -140,7 +140,7 @@ export function footer(ctx: Ctx): string {
       <h4>${e(ctx.t('footer.language'))}</h4>
       ${langSwitch(ctx)}
       <button class="footer-link" type="button" data-theme-toggle>${icon('sun', 14)}${e(ctx.t('nav.theme'))}</button>
-      <span class="footer-copy">© ${new Date().getFullYear()} ${e(ctx.siteName)}</span>
+      <span class="footer-copy">© ${new Date().getFullYear()} <a href="https://github.com/xfm0797/cloudflare-workers-bbs-Nexus" target="_blank" rel="noopener noreferrer" title="GitHub · cloudflare-workers-bbs-Nexus">${e(ctx.siteName)}</a></span>
     </div>
   </div>
 </footer>`;
