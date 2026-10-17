@@ -143,13 +143,8 @@ export default {
       }
 
       const method = req.method === 'HEAD' ? 'GET' : req.method;
-      const match = method === 'GET' || method === 'POST' ? dispatch(method, path) : null;
-      if (!match) {
-        const ctx = await buildContext(req, env, exec, {});
-        return withSecurityHeaders(ctx.html(errorPage(ctx, 404), 404));
-      }
 
-      // 语言切换
+      // 语言切换（必须在路由分发之前处理，否则会被 404 拦截）
       if (path.startsWith('/lang/') && method === 'GET') {
         const code = path.slice('/lang/'.length);
         const next = url.searchParams.get('next') || '/';
@@ -159,8 +154,15 @@ export default {
             maxAge: 60 * 60 * 24 * 365,
             httpOnly: false,
             sameSite: 'Lax',
+            secure: url.protocol === 'https:',
           }),
         ]);
+      }
+
+      const match = method === 'GET' || method === 'POST' ? dispatch(method, path) : null;
+      if (!match) {
+        const ctx = await buildContext(req, env, exec, {});
+        return withSecurityHeaders(ctx.html(errorPage(ctx, 404), 404));
       }
 
       const rule = rateRule(path, method);

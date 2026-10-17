@@ -1,6 +1,6 @@
 import { get } from '../router';
 import { getCategories, listTopics } from '../lib/db';
-import { categoryName } from '../lib/i18n';
+import { categoryName, siteTagline } from '../lib/i18n';
 
 function xmlEscape(input: string): string {
   return input
@@ -34,7 +34,7 @@ get('/feed.xml', async (ctx) => {
     <title>${xmlEscape(ctx.siteName)}</title>
     <link>${origin}/</link>
     <atom:link href="${origin}/feed.xml" rel="self" type="application/rss+xml" />
-    <description>${xmlEscape(ctx.env.SITE_TAGLINE || ctx.t('home.subtitle'))}</description>
+    <description>${xmlEscape(siteTagline(ctx))}</description>
     <language>${ctx.locale}</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
 ${items}

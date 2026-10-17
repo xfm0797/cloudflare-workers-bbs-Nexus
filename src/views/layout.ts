@@ -1,6 +1,6 @@
 import type { Ctx, TopicRow } from '../types';
 import type { Category } from '../lib/types';
-import { categoryDesc, categoryName } from '../lib/i18n';
+import { categoryDesc, categoryName, siteTagline } from '../lib/i18n';
 import { escapeHtml as e } from '../lib/utils';
 import { avatar, icon } from './ui';
 import { stats as fetchStats, topMembers } from '../lib/db';
@@ -147,8 +147,8 @@ export function footer(ctx: Ctx): string {
 }
 
 export function layout(ctx: Ctx, opts: LayoutOptions): string {
-  const title = opts.title ? `${opts.title} · ${ctx.siteName}` : `${ctx.siteName} · ${ctx.env.SITE_TAGLINE || ctx.t('home.subtitle')}`;
-  const desc = opts.description || ctx.env.SITE_TAGLINE || ctx.t('home.subtitle');
+  const title = opts.title ? `${opts.title} · ${ctx.siteName}` : `${ctx.siteName} · ${siteTagline(ctx)}`;
+  const desc = opts.description || siteTagline(ctx);
   const bodyClass = ['page', opts.bodyClass || ''].filter(Boolean).join(' ');
   const main = `<main id="main" class="${opts.wide ? 'container-wide' : ''}">
       ${flashBanner(ctx)}

@@ -1,6 +1,6 @@
 import type { Ctx, PostRow, TopicRow } from '../types';
 import type { Category, Topic, User } from '../lib/types';
-import { categoryDesc, categoryName, formatDate, formatDateTime, formatRelative } from '../lib/i18n';
+import { categoryDesc, categoryName, formatDate, formatDateTime, formatRelative, siteTagline } from '../lib/i18n';
 import { escapeHtml as e } from '../lib/utils';
 import { avatar, catChip, csrfField, emptyState, icon, pagination, roleBadge, topicRow } from './ui';
 import { layout } from './layout';
@@ -53,7 +53,7 @@ export function homePage(
         ctx.t('home.stats.topics'),
       )}</span>
       <h1>${e(ctx.t('home.welcome', { site: ctx.siteName }))}</h1>
-      <p>${e(ctx.env.SITE_TAGLINE || ctx.t('home.joinDesc'))}</p>
+      <p>${e(siteTagline(ctx, 'home.joinDesc'))}</p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="/new">${icon('plus', 16)}${e(ctx.t('home.newTopic'))}</a>
         <a class="btn btn-outline" href="/categories">${e(ctx.t('home.heroCta'))}${icon('chevronRight', 16)}</a>

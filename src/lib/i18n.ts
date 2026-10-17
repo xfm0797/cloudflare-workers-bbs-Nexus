@@ -770,3 +770,15 @@ export function categoryName(c: Pick<Category, 'name' | 'name_en'>, locale: Loca
 export function categoryDesc(c: Pick<Category, 'description' | 'description_en'>, locale: Locale): string {
   return (locale === 'en-US' ? c.description_en || c.description : c.description) || '';
 }
+
+/**
+ * 站点标语：中文环境优先用后台/环境变量配置的 SITE_TAGLINE，
+ * 英文环境回退到内置英文词条，避免英文站出现中文标语。
+ */
+export function siteTagline(
+  ctx: { locale: Locale; env: { SITE_TAGLINE?: string }; t: (key: string) => string },
+  fallbackKey = 'home.subtitle',
+): string {
+  if (ctx.locale !== 'en-US' && ctx.env.SITE_TAGLINE) return ctx.env.SITE_TAGLINE;
+  return ctx.t(fallbackKey);
+}
