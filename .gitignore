@@ -5,3 +5,6 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# 本地工作笔记（不公开）
+.workbuddy/
