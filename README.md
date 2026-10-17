@@ -124,7 +124,7 @@ npm run ship
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/xfm0797/cloudflare-workers-bbs-Nexus)
 
-仓库已带 `.github/workflows/deploy.yml`：**push 到 `main` 自动发布**，也可以在 Actions 页面点 **Run workflow** 手动触发（可勾选是否迁移、是否写入初始板块）。
+仓库已带 `.github/workflows/deploy.yml`：**push 到 `main` 自动发布**，也可以在 Actions 页面点 **Run workflow** 手动触发（可勾选是否迁移、是否写入初始板块）。没配密钥时流水线只做类型检查并提示跳过，不会出现失败记录。
 
 首次启用需在仓库 `Settings → Secrets and variables → Actions` 配置：
 
@@ -135,7 +135,7 @@ npm run ship
 | Secret | `SESSION_SECRET` | 可选，填了则每次部署同步会话密钥（不填则沿用线上已有值） |
 | Variable | `D1_DATABASE_ID` | 可选，fork 后用自己的数据库时覆盖 `wrangler.toml` 里的 id |
 
-> 用别人的仓库部署自己的站：先 Fork → 改 `wrangler.toml` 的 `name` 与 `routes`（或删掉 `[[routes]]` 用 workers.dev 域名）→ 按上表配好密钥 → 点 Run workflow。
+> 用别人的仓库部署自己的站：先 Fork → 删掉 `wrangler.toml` 里的 `[[routes]]` 段（否则会尝试绑定原作者的域名）→ 需要的话改 `name` → 按上表配好 `CLOUDFLARE_API_TOKEN`（和自己的 `D1_DATABASE_ID`）→ 点 Run workflow。
 
 ### 方式 C：手动分步
 
