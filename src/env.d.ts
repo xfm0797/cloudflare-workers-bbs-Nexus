@@ -32,6 +32,15 @@ export interface Env {
   /** 可选：设为 1 允许图床失败时自动切换渠道重试（默认关闭） */
   IMGBED_AUTO_RETRY?: string;
 
+  /** Resend 发信：API Key 与发件人需同时配置才会真正发信 */
+  RESEND_API_KEY?: string;
+  /** 发件人，形如 `Nexus <noreply@example.com>`（域名需在 Resend 验证） */
+  MAIL_FROM?: string;
+  /** 可选：Reply-To 地址 */
+  MAIL_REPLY_TO?: string;
+  /** 设为 true 时未验证邮箱的用户不能发帖 / 回复 */
+  REQUIRE_EMAIL_VERIFICATION?: string;
+
   /** Workers 原生限流 binding（wrangler.toml 的 [[ratelimits]]），本地未配置时回退到 Cache 计数 */
   RL_PAGE?: RateLimitBinding;
   RL_USER?: RateLimitBinding;

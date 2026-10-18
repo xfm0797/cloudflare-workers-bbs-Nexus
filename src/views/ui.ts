@@ -144,12 +144,36 @@ export function pagination(_ctx: Ctx, page: number, totalPages: number, pathname
   </nav>`;
 }
 
-export function topicRow(ctx: Ctx, topic: TopicRow): string {
+/** 转义后按关键词高亮（大小写不敏感） */
+function highlightText(text: string, terms: string[]): string {
+  let html = e(text);
+  for (const term of terms) {
+    const trimmed = term.trim();
+    if (!trimmed) continue;
+    const safe = e(trimmed).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try {
+      html = html.replace(new RegExp(safe, 'gi'), (match) => `<mark>${match}</mark>`);
+    } catch {
+      // 关键词含特殊字符时跳过
+    }
+  }
+  return html;
+}
+
+export function topicRow(ctx: Ctx, topic: TopicRow, opts: { snippet?: string; highlight?: string[] } = {}): string {
   const pinned = topic.is_pinned ? `<span class="pill pill-pin">${icon('pin', 11)}${ctx.t('topic.pinned')}</span>` : '';
   const featured = topic.is_featured ? `<span class="pill pill-feature">${icon('sparkles', 11)}${ctx.t('topic.featured')}</span>` : '';
   const locked = topic.is_locked ? `<span class="pill pill-lock">${icon('lock', 11)}</span>` : '';
   const author = topic.author_name || topic.author_username;
   const activity = formatRelative(topic.last_post_at, ctx.locale, ctx.t);
+  const snippet = opts.snippet || topic.search_snippet;
+  const terms = (opts.highlight || []).filter(Boolean);
+  const title = terms.length ? highlightText(topic.title, terms) : e(topic.title);
+  const summary = snippet
+    ? `<p class="topic-row-snippet">${snippet}</p>`
+    : topic.excerpt
+      ? `<p class="topic-row-excerpt">${e(topic.excerpt)}</p>`
+      : '';
 
   return `<article class="topic-row">
     <a class="topic-row-avatar" href="/u/${e(topic.author_username)}" aria-label="${e(author)}">
@@ -159,8 +183,8 @@ export function topicRow(ctx: Ctx, topic: TopicRow): string {
       <div class="topic-row-head">
         ${catChip(ctx, topic)}${pinned}${featured}${locked}
       </div>
-      <h3 class="topic-row-title"><a href="/t/${topic.id}">${e(topic.title)}</a></h3>
-      ${topic.excerpt ? `<p class="topic-row-excerpt">${e(topic.excerpt)}</p>` : ''}
+      <h3 class="topic-row-title"><a href="/t/${topic.id}">${title}</a></h3>
+      ${summary}
       <div class="topic-row-meta">
         <span class="meta-author">${e(author)}</span>
         <span class="meta-dot">·</span>

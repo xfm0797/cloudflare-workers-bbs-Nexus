@@ -137,6 +137,20 @@ export async function getTopicRow(env: Env, id: number): Promise<TopicRow | null
   return first<TopicRow>(env, `${TOPIC_SELECT} WHERE t.id = ?`, id);
 }
 
+/** 按给定 id 顺序批量取主题（搜索结果需要保持相关度顺序） */
+export async function getTopicsByIds(env: Env, ids: number[]): Promise<TopicRow[]> {
+  const unique = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))];
+  if (!unique.length) return [];
+  const placeholders = unique.map(() => '?').join(',');
+  const rows = await all<TopicRow>(
+    env,
+    `${TOPIC_SELECT} WHERE t.id IN (${placeholders}) AND t.is_deleted = 0`,
+    ...unique,
+  );
+  const map = new Map(rows.map((row) => [row.id, row]));
+  return unique.map((id) => map.get(id)).filter((row): row is TopicRow => !!row);
+}
+
 export async function getTopic(env: Env, id: number): Promise<Topic | null> {
   return first<Topic>(env, 'SELECT * FROM topics WHERE id = ?', id);
 }

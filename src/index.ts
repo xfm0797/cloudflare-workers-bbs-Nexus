@@ -23,6 +23,7 @@ import { errorPage } from './views/pages';
 import './routes/home';
 import './routes/topic';
 import './routes/auth';
+import './routes/email';
 import './routes/user';
 import './routes/admin';
 import './routes/api';

@@ -35,6 +35,12 @@ IMGBED_URL = "https://img.lovou.eu.org"
 # IMGBED_COMPRESS = "1"     # 交给图床做服务端压缩（默认关闭，部分渠道压缩会 400）
 # IMGBED_AUTO_RETRY = "1"   # 上传失败时自动切渠道（默认关闭）
 
+# 邮箱验证（Resend）
+# 邮件里的链接默认取请求 origin；自定义域名时建议显式设置 SITE_URL
+SITE_URL = "https://forum.lovou.pw"
+# 设为 "true" 后，未验证邮箱的用户不能发帖 / 回复（默认只提示不拦截）
+REQUIRE_EMAIL_VERIFICATION = "false"
+
 # 请求限流（Workers 原生 Rate Limiting binding，计数不经过 D1，也不花 Worker 额度）
 # 未登录访客 / 已登录用户 / 搜索 分别配额，按 IP 计数
 [[ratelimits]]
@@ -59,6 +65,9 @@ enabled = true
 # 密钥请用 `wrangler secret put` 写入，切勿提交到仓库：
 #   SESSION_SECRET        必填，任意 32+ 位随机字符串
 #   IMGBED_AUTH_CODE      可选，图床认证码；配置后编辑器出现「插入图片」
+#   RESEND_API_KEY        可选，Resend 发信密钥
+#   MAIL_FROM             可选，发件人，如 Nexus <noreply@lovou.pw>
+#   MAIL_REPLY_TO         可选，回复地址
 #   GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
 #   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 #   GITLAB_CLIENT_ID / GITLAB_CLIENT_SECRET

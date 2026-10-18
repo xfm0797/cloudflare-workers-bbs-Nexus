@@ -11,7 +11,7 @@ import { buildSidebar } from '../views/layout';
 import { aboutPage, categoriesPage, categoryPage, errorPage, homePage, searchPage } from '../views/pages';
 import { parseIntParam } from '../lib/utils';
 import { renderMarkdown } from '../lib/markdown';
-import type { TopicRow } from '../types';
+import { searchTopics } from '../lib/search';
 
 get('/', async (ctx) => {
   if (!(await hasUsers(ctx.env))) return ctx.redirect('/setup');
@@ -71,14 +71,12 @@ get('/c/:slug', async (ctx) => {
 
 get('/search', async (ctx) => {
   const q = (ctx.query.get('q') || '').trim().slice(0, 80);
-  let topics: TopicRow[] = [];
-  let total = 0;
-  if (q.length >= 1) {
-    const res = await listTopics(ctx.env, { search: q, sort: 'latest', page: 1, perPage: 40 });
-    topics = res.topics;
-    total = res.total;
-  }
-  return ctx.html(searchPage(ctx, q, topics, total));
+  const page = parseIntParam(ctx.query.get('page'), 1);
+  const result = q
+    ? await searchTopics(ctx.env, q, { page, perPage: 20 })
+    : { topics: [], total: 0, page: 1, totalPages: 1, mode: 'fts' as const, tookMs: 0 };
+
+  return ctx.html(searchPage(ctx, { q, ...result }));
 });
 
 get('/about', (ctx) => {

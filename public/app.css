@@ -2266,6 +2266,74 @@ select {
   border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
   color: var(--danger);
 }
+.flash-warn {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 28%, var(--border));
+  color: var(--warn);
+}
+.email-banner-link {
+  margin-left: auto;
+  font-weight: 650;
+  color: inherit;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+/* 设置页 · 邮箱验证 */
+.email-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.email-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.email-row-main strong {
+  font-size: 14.5px;
+}
+.email-row-main span {
+  font-size: 13px;
+}
+.email-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.email-row-actions form {
+  display: inline-flex;
+}
+
+/* 搜索命中摘要 */
+.topic-row-snippet {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.topic-row-snippet mark,
+.md mark {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.search-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
 
 .muted {
   color: var(--text-3);

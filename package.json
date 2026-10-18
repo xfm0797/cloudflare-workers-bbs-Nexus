@@ -15,6 +15,7 @@
     "db:seed": "wrangler d1 execute cf-bbs --local --file=./seed.sql",
     "db:seed:remote": "wrangler d1 execute cf-bbs --remote --file=./seed.sql",
     "db:reset": "node -e \"require('fs').rmSync('.wrangler/state/v3/d1',{recursive:true,force:true})\" && npm run db:migrate && npm run db:seed",
+    "search:reindex": "node scripts/search-reindex.mjs",
     "demo": "node scripts/demo-data.mjs",
     "shot": "node scripts/shot-mobile.cjs",
     "tail": "wrangler tail"

@@ -13,6 +13,7 @@ import {
 } from '../lib/auth';
 import { countUsers, createTopic, getUserByUsername, getUserById, hasUsers } from '../lib/db';
 import { getProvider } from '../lib/oauth';
+import { issueVerification } from '../lib/emailverify';
 import { authPage, errorPage } from '../views/pages';
 import { randomToken, serializeCookie } from '../lib/utils';
 import type { User } from '../lib/types';
@@ -47,6 +48,15 @@ async function uniqueUsername(env: Parameters<typeof getUserByUsername>[0], base
 function callbackUrl(ctx: { env: { SITE_URL?: string }; url: URL }, provider: string): string {
   const base = (ctx.env.SITE_URL || ctx.url.origin).replace(/\/$/, '');
   return `${base}/auth/${provider}/callback`;
+}
+
+/** 在跳转地址上附加提示（保留原有查询参数与锚点） */
+function withFlash(path: string, key: string, type: 'ok' | 'error' = 'ok'): string {
+  const hashIdx = path.indexOf('#');
+  const hash = hashIdx >= 0 ? path.slice(hashIdx) : '';
+  const base = hashIdx >= 0 ? path.slice(0, hashIdx) : path;
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}flash=${encodeURIComponent(key)}&ft=${type}${hash}`;
 }
 
 /* ------------------------------------------------------------------ 登录 */
@@ -144,10 +154,23 @@ post('/register', async (ctx) => {
   const user = await getUserById(ctx.env, id);
   if (!user) return ctx.html(errorPage(ctx, 500), 500);
 
+  // 发送验证邮件：失败不影响注册本身，用户可在设置页重发
+  let mailSent = false;
+  try {
+    const issue = await issueVerification(ctx.env, user, ctx.url.origin, ctx.siteName);
+    mailSent = issue.sent;
+  } catch (err) {
+    console.error('register_verification_failed', err);
+  }
+
   const cookie = await createSessionCookie(user, ctx.env.SESSION_SECRET, ctx.url.protocol === 'https:');
   return new Response(null, {
     status: 302,
-    headers: { location: next, 'set-cookie': cookie, 'cache-control': 'no-store' },
+    headers: {
+      location: mailSent ? withFlash(next, 'email.sentRegister') : next,
+      'set-cookie': cookie,
+      'cache-control': 'no-store',
+    },
   });
 });
 

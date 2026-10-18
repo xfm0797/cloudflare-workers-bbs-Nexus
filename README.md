@@ -116,6 +116,50 @@ npx wrangler secret put IMGBED_AUTH_CODE   # 图后台设置的认证码
 
 ---
 
+## 邮箱验证（Resend）
+
+注册后自动发送验证邮件，点链接即完成验证（令牌 24 小时有效、一次性使用、只存 SHA-256 摘要）。设置页有独立卡片显示验证状态并提供「重新发送」；修改邮箱会自动重发并把状态重置为未验证。
+
+```bash
+npx wrangler secret put RESEND_API_KEY   # Resend 后台创建
+npx wrangler secret put MAIL_FROM        # 如 "Nexus <noreply@lovou.pw>"，域名需在 Resend 验证
+# 可选
+npx wrangler secret put MAIL_REPLY_TO
+```
+
+`wrangler.toml` 里控制行为：
+
+```toml
+SITE_URL = "https://forum.lovou.pw"          # 邮件链接前缀，自定义域必填
+REQUIRE_EMAIL_VERIFICATION = "false"          # true = 未验证不能发帖 / 回复
+```
+
+- 未配置 `RESEND_API_KEY` / `MAIL_FROM` 时：注册照常成功，验证链接只打印在 `wrangler tail` 日志里，前端不显示验证横幅，也不会因为强制验证把人锁死
+- 重发限流：同账号 60 秒冷却 + 每人 3 封 / 10 分钟
+- Resend 未验证域名时只能发到账号自己的邮箱，正式上线前记得先验证发信域名
+
+---
+
+## 全文搜索（FTS5）
+
+搜索走 D1 内置的 FTS5 虚拟表（`migrations/0003_search_fts.sql`），索引主题标题 / 摘要 / 标签与**回复正文**：
+
+- `trigram` 分词：不依赖中文词典，中英文都按子串匹配，`snippet()` 直接给出命中片段并高亮
+- `bm25` 相关度排序，标题权重 8、正文权重 1
+- 查询词短于 3 字符（如中文两字词）时自动回退 `LIKE`；索引异常同样回退，不会因为搜索报 500
+- 触发器维护索引：主题新增/改标题/软删除/恢复、回复新增/编辑/软删除都会同步；软删除的主题连同其回复一起从索引移除
+
+重建索引（批量导入数据后、或怀疑索引不一致时）：
+
+```bash
+npm run search:reindex              # 本地
+npm run search:reindex -- --remote  # 线上
+```
+
+> trigram 是子串匹配：连写的长中文词需要是原文中连续出现的片段；用空格分词可以得到 AND 语义（如 `论坛 界面`）。
+
+---
+
 ## 部署
 
 ### 方式 A：一键部署（本地一条命令）

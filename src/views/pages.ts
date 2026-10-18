@@ -6,6 +6,8 @@ import { avatar, catChip, csrfField, emptyState, icon, pagination, roleBadge, to
 import { layout } from './layout';
 import { enabledProviders } from '../lib/oauth';
 import { imgbedEnabled } from '../lib/imgbed';
+import { mailConfigured } from '../lib/mail';
+import { verificationRequired } from '../lib/emailverify';
 
 /* ------------------------------------------------------------------ 首页 */
 
@@ -615,6 +617,9 @@ export function settingsPage(
   const providers = enabledProviders(ctx.env);
   const connected = new Map(data.accounts.map((a) => [a.provider, a]));
   const canDisconnect = data.accounts.length > 0 && (u.password_hash || data.accounts.length > 1);
+  const emailVerified = u.email_verified === 1;
+  const mailReady = mailConfigured(ctx.env);
+  const verifyRequired = verificationRequired(ctx.env);
 
   const body = `<div class="page-head">
       <h1>${e(ctx.t('nav.settings'))}</h1>
@@ -658,6 +663,36 @@ export function settingsPage(
       </div>
       <div class="form-actions"><button class="btn btn-primary" type="submit">${e(ctx.t('user.saveProfile'))}</button></div>
     </form>
+
+    <div class="card form-card">
+      <h2>${e(ctx.t('email.section'))}</h2>
+      <div class="email-row">
+        <div class="email-row-main">
+          <strong>${e(u.email || ctx.t('email.noEmail'))}</strong>
+          <span class="muted">${e(
+            emailVerified
+              ? ctx.t('email.verifiedDesc')
+              : mailReady
+                ? ctx.t('email.unverifiedDesc')
+                : ctx.t('email.notConfiguredDesc'),
+          )}</span>
+        </div>
+        <div class="email-row-actions">
+          <span class="badge ${emailVerified ? 'badge-ok' : 'badge-warn'}">${e(
+            emailVerified ? ctx.t('email.verified') : ctx.t('email.unverified'),
+          )}</span>
+          ${
+            !emailVerified && u.email && mailReady
+              ? `<form method="post" action="/verify-email/resend">
+                  ${csrfField(ctx)}
+                  <button class="btn btn-outline btn-sm" type="submit">${icon('megaphone', 14)}${e(ctx.t('email.resend'))}</button>
+                </form>`
+              : ''
+          }
+        </div>
+      </div>
+      ${verifyRequired && !emailVerified ? `<p class="hint">${icon('alert', 13)}${e(ctx.t('email.requiredHint'))}</p>` : ''}
+    </div>
 
     <div class="card form-card">
       <h2>${e(ctx.t('user.connected'))}</h2>
@@ -760,7 +795,23 @@ export function bookmarksPage(ctx: Ctx, topics: TopicRow[]): string {
 
 /* ------------------------------------------------------------------ 搜索 */
 
-export function searchPage(ctx: Ctx, q: string, topics: TopicRow[], total: number): string {
+export function searchPage(
+  ctx: Ctx,
+  data: {
+    q: string;
+    topics: TopicRow[];
+    total: number;
+    page: number;
+    totalPages: number;
+    mode?: 'fts' | 'like';
+    tookMs?: number;
+  },
+): string {
+  const { q, topics, total, page, totalPages, mode, tookMs } = data;
+  const query = new URLSearchParams();
+  if (q) query.set('q', q);
+  const terms = q.split(/\s+/).filter(Boolean);
+
   const body = `<div class="page-head">
       <h1>${e(ctx.t('search.title'))}</h1>
       <form class="search-big" action="/search" method="get" role="search">
@@ -769,14 +820,25 @@ export function searchPage(ctx: Ctx, q: string, topics: TopicRow[], total: numbe
         <button class="btn btn-primary" type="submit">${e(ctx.t('nav.search'))}</button>
       </form>
     </div>
-    ${q ? `<p class="search-summary">${e(ctx.t('search.results', { count: total }))}</p>` : ''}
+    ${
+      q
+        ? `<p class="search-summary">${e(ctx.t('search.results', { count: total }))}${
+            mode === 'fts' && total > 0
+              ? `<span class="search-meta">${icon('sparkles', 12)}${e(ctx.t('search.relevance'))}${
+                  typeof tookMs === 'number' ? ` · ${tookMs}ms` : ''
+                }</span>`
+              : ''
+          }</p>`
+        : ''
+    }
     <div class="topic-list">${
       topics.length
-        ? topics.map((t) => topicRow(ctx, t)).join('')
+        ? topics.map((t) => topicRow(ctx, t, { highlight: terms })).join('')
         : q
           ? emptyState(ctx.t('search.noResults'), ctx.t('search.noResultsDesc'))
           : emptyState(ctx.t('search.title'), ctx.t('search.placeholder'))
-    }</div>`;
+    }</div>
+    ${pagination(ctx, page, totalPages, '/search', query)}`;
   return layout(ctx, { body, title: ctx.t('search.title'), noindex: true });
 }
 

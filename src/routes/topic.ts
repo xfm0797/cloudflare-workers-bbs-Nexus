@@ -16,6 +16,7 @@ import { buildSidebar } from '../views/layout';
 import { composePage, errorPage, topicPage } from '../views/pages';
 import { parseIntParam } from '../lib/utils';
 import { isStaff } from '../lib/auth';
+import { needsEmailVerification } from '../lib/emailverify';
 
 const POSTS_PER_PAGE = 15;
 
@@ -83,6 +84,13 @@ post('/new', async (ctx) => {
   if (!ctx.user) return ctx.redirect('/login?next=/new');
   if (!canWrite(ctx)) return ctx.html(errorPage(ctx, 403, ctx.t('auth.banned')), 403);
 
+  // 站点开启「必须验证邮箱」时，未验证用户只能看不能发
+  if (needsEmailVerification(ctx.env, ctx.user)) {
+    const list = (await getCategories(ctx.env)).filter((c) => !c.admin_only || ctx.user!.role === 'admin');
+    ctx.flash = { type: 'error', text: ctx.t('email.blocked') };
+    return ctx.html(composePage(ctx, list), 403);
+  }
+
   const title = String(ctx.form?.get('title') || '').trim();
   const content = String(ctx.form?.get('content') || '').trim();
   const categoryId = Number.parseInt(String(ctx.form?.get('category_id') || ''), 10);
@@ -129,6 +137,7 @@ post('/t/:id/reply', async (ctx) => {
   const id = parseIntParam(ctx.params.id, 0);
   if (!ctx.user) return ctx.redirect(`/login?next=/t/${id}`);
   if (!canWrite(ctx)) return ctx.html(errorPage(ctx, 403, ctx.t('auth.banned')), 403);
+  if (needsEmailVerification(ctx.env, ctx.user)) return ctx.redirect(`/t/${id}`, 'email.blocked', 'error');
 
   const topic = await getTopic(ctx.env, id);
   if (!topic || topic.is_deleted) return ctx.html(errorPage(ctx, 404), 404);

@@ -8,6 +8,7 @@ import {
 } from '../lib/db';
 import { bookmarksPage, errorPage, notificationsPage, profilePage, settingsPage } from '../views/pages';
 import { createSessionCookie, hashPassword, isValidEmail, passwordIterations, verifyPassword } from '../lib/auth';
+import { issueVerification } from '../lib/emailverify';
 import type { User } from '../lib/types';
 
 function safeUrl(raw: string): string | null {
@@ -78,7 +79,8 @@ post('/settings/profile', async (ctx) => {
   if (avatar_url === null) return fail(ctx.t('error.badRequest'));
   if (website === null) return fail(ctx.t('error.badRequest'));
 
-  if (email && email !== (u.email || '').toLowerCase()) {
+  const emailChanged = !!email && email !== (u.email || '').toLowerCase();
+  if (emailChanged) {
     const taken = await ctx.env.DB.prepare('SELECT id FROM users WHERE lower(email) = ? AND id != ?')
       .bind(email, u.id)
       .first();
@@ -92,6 +94,19 @@ post('/settings/profile', async (ctx) => {
   )
     .bind(display_name, email || null, avatar_url || null, website || null, location || null, bio || null, email, u.id)
     .run();
+
+  // 换了邮箱就重新发一封验证信（发不出去也不影响保存）
+  if (emailChanged) {
+    try {
+      const fresh = await ctx.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(u.id).first<User>();
+      if (fresh) {
+        const issued = await issueVerification(ctx.env, fresh, ctx.url.origin, ctx.siteName);
+        if (issued.sent) return ctx.redirect('/settings', 'email.sent');
+      }
+    } catch (err) {
+      console.error('settings_email_verify_failed', err);
+    }
+  }
 
   return ctx.redirect('/settings', 'user.saved');
 });

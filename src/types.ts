@@ -35,6 +35,8 @@ export interface TopicRow extends Topic {
   last_poster_username?: string | null;
   last_poster_name?: string | null;
   last_poster_avatar?: string | null;
+  /** 搜索结果里命中的片段（已转义，含 <mark> 高亮） */
+  search_snippet?: string;
 }
 
 export interface PostRow extends Post {

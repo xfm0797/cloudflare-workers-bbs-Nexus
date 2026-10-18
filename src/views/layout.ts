@@ -4,6 +4,8 @@ import { categoryDesc, categoryName, siteTagline } from '../lib/i18n';
 import { escapeHtml as e } from '../lib/utils';
 import { avatar, icon } from './ui';
 import { stats as fetchStats, topMembers } from '../lib/db';
+import { mailConfigured } from '../lib/mail';
+import { verificationRequired } from '../lib/emailverify';
 
 export interface LayoutOptions {
   title?: string;
@@ -111,6 +113,17 @@ export function flashBanner(ctx: Ctx): string {
   )}</span></div>`;
 }
 
+/** 未验证邮箱时的常驻提示（发信可用或强制验证时才出现） */
+export function emailBanner(ctx: Ctx): string {
+  const user = ctx.user;
+  if (!user || user.email_verified === 1) return '';
+  if (!user.email) return '';
+  if (!mailConfigured(ctx.env) && !verificationRequired(ctx.env)) return '';
+  return `<div class="flash flash-warn email-banner" role="status">${icon('alert', 16)}<span>${e(
+    ctx.t('email.banner'),
+  )}</span><a class="email-banner-link" href="/settings">${e(ctx.t('email.bannerAction'))}</a></div>`;
+}
+
 export function footer(ctx: Ctx): string {
   return `<footer class="site-footer">
   <div class="container footer-inner">
@@ -151,6 +164,7 @@ export function layout(ctx: Ctx, opts: LayoutOptions): string {
   const desc = opts.description || siteTagline(ctx);
   const bodyClass = ['page', opts.bodyClass || ''].filter(Boolean).join(' ');
   const main = `<main id="main" class="${opts.wide ? 'container-wide' : ''}">
+      ${emailBanner(ctx)}
       ${flashBanner(ctx)}
       ${opts.body}
     </main>`;
