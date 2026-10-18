@@ -119,8 +119,9 @@ export function emailBanner(ctx: Ctx): string {
   if (!user || user.email_verified === 1) return '';
   if (!user.email) return '';
   if (!mailConfigured(ctx.env) && !verificationRequired(ctx.env)) return '';
+  const required = verificationRequired(ctx.env);
   return `<div class="flash flash-warn email-banner" role="status">${icon('alert', 16)}<span>${e(
-    ctx.t('email.banner'),
+    ctx.t(required ? 'email.banner' : 'email.bannerSoft'),
   )}</span><a class="email-banner-link" href="/settings">${e(ctx.t('email.bannerAction'))}</a></div>`;
 }
 
