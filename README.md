@@ -120,6 +120,8 @@ npx wrangler secret put IMGBED_AUTH_CODE   # 图后台设置的认证码
 
 注册后自动发送验证邮件，点链接即完成验证（令牌 24 小时有效、一次性使用、只存 SHA-256 摘要）。设置页有独立卡片显示验证状态并提供「重新发送」；修改邮箱会自动重发并把状态重置为未验证。
 
+![邮箱验证设置卡片](docs/screenshots/email-verify-card.png)
+
 ```bash
 npx wrangler secret put RESEND_API_KEY   # Resend 后台创建
 npx wrangler secret put MAIL_FROM        # 如 "Nexus <noreply@lovou.pw>"，域名需在 Resend 验证
