@@ -133,10 +133,11 @@ npx wrangler secret put MAIL_REPLY_TO
 
 ```toml
 SITE_URL = "https://forum.lovou.pw"          # 邮件链接前缀，自定义域必填
-REQUIRE_EMAIL_VERIFICATION = "false"          # true = 未验证不能发帖 / 回复
+REQUIRE_EMAIL_VERIFICATION = "true"           # true = 未验证不能发帖 / 回复
 ```
 
 - 未配置 `RESEND_API_KEY` / `MAIL_FROM` 时：注册照常成功，验证链接只打印在 `wrangler tail` 日志里，前端不显示验证横幅，也不会因为强制验证把人锁死
+- 开启 `REQUIRE_EMAIL_VERIFICATION` 后，未验证用户仍可浏览 / 搜索，但发帖与回复会被拦回编辑器并在顶部常驻提示；老账号需要在「设置 → 邮箱验证」点「重新发送」完成验证
 - 重发限流：同账号 60 秒冷却 + 每人 3 封 / 10 分钟
 - Resend 未验证域名时只能发到账号自己的邮箱，正式上线前记得先验证发信域名
 

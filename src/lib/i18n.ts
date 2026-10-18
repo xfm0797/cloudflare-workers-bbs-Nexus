@@ -237,7 +237,7 @@ const zh: Record<string, string> = {
   'email.expired': '验证链接已过期，请在设置页重新发送',
   'email.used': '这个验证链接已经使用过了',
   'email.changed': '邮箱已变更，请重新发送验证邮件',
-  'email.blocked': '请先验证邮箱后再发布内容',
+  'email.blocked': '请先验证邮箱后再发布内容（设置 → 邮箱验证）',
   'email.noEmailSet': '请先在设置里填写邮箱',
   'user.changePasswordHint': '修改密码后，其他设备的登录状态将失效',
 
@@ -611,7 +611,7 @@ const en: Record<string, string> = {
   'email.expired': 'This verification link has expired, please request a new one in settings',
   'email.used': 'This verification link has already been used',
   'email.changed': 'Your email has changed, please request a new verification link',
-  'email.blocked': 'Please verify your email before posting',
+  'email.blocked': 'Please verify your email before posting (Settings → Email verification)',
   'email.noEmailSet': 'Please add an email address in settings first',
   'user.changePasswordHint': 'Changing your password signs out other devices',
 
