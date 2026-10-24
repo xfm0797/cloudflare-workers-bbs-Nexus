@@ -2,7 +2,7 @@ import type { Env } from './env';
 import type { Ctx } from './types';
 import { detectLocale, translator, isLocale } from './lib/i18n';
 import { loadUser, timingSafeEqual } from './lib/auth';
-import { getSettings, unreadNotifications, touchUser } from './lib/db';
+import { getSettings, unreadNotifications, unreadConversations, touchUser } from './lib/db';
 import {
   clientIp,
   getCookie,
@@ -25,6 +25,8 @@ import './routes/topic';
 import './routes/auth';
 import './routes/email';
 import './routes/user';
+import './routes/messages';
+import './routes/tags';
 import './routes/admin';
 import './routes/api';
 import './routes/feeds';
@@ -54,6 +56,7 @@ function rateRule(path: string, method: string): { key: string; limit: number; w
   if (method !== 'POST') return null;
   if (path === '/login' || path === '/register' || path === '/setup') return { key: 'auth', limit: 15, window: 600_000 };
   if (path === '/new' || path.endsWith('/reply')) return { key: 'post', limit: 20, window: 600_000 };
+  if (path === '/messages' || path.startsWith('/messages/')) return { key: 'dm', limit: 60, window: 600_000 };
   if (path.startsWith('/api/')) return { key: 'api', limit: 240, window: 60_000 };
   return null;
 }
@@ -89,6 +92,7 @@ async function buildContext(req: Request, env: Env, exec: ExecutionContext, para
   }
 
   const unread = user ? await unreadNotifications(env, user.id) : 0;
+  const unreadDm = user ? await unreadConversations(env, user.id) : 0;
 
   const ctx: Ctx = {
     req,
@@ -105,6 +109,7 @@ async function buildContext(req: Request, env: Env, exec: ExecutionContext, para
     siteName,
     settings,
     unread,
+    unreadDm,
     flash,
     html: (body, status = 200, init) => htmlResponse(body, status, init),
     redirect: (path, msg, type = 'ok') => {

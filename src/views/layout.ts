@@ -47,6 +47,7 @@ export function header(ctx: Ctx, activeKey?: string): string {
       ${navItem('/', ctx.t('nav.home'), 'home')}
       ${navItem('/?sort=hot', ctx.t('nav.hot'), 'hot')}
       ${navItem('/categories', ctx.t('nav.categories'), 'categories')}
+      ${navItem('/tags', ctx.t('tags.title'), 'tags')}
     </nav>
     <form class="header-search" action="/search" method="get" role="search">
       ${icon('search', 16)}
@@ -60,6 +61,9 @@ export function header(ctx: Ctx, activeKey?: string): string {
       ${
         u
           ? `<a class="btn btn-primary btn-sm header-new" href="/new">${icon('plus', 16)}<span>${e(ctx.t('nav.newTopic'))}</span></a>
+             <a class="icon-btn bell-btn" href="/messages" aria-label="${e(ctx.t('nav.messages'))}">
+               ${icon('mail', 19)}${(ctx.unreadDm ?? 0) > 0 ? `<span class="bell-dot">${(ctx.unreadDm ?? 0) > 99 ? '99+' : ctx.unreadDm}</span>` : ''}
+             </a>
              <a class="icon-btn bell-btn" href="/notifications" aria-label="${e(ctx.t('nav.notifications'))}">
                ${icon('bell', 19)}${ctx.unread > 0 ? `<span class="bell-dot">${ctx.unread > 99 ? '99+' : ctx.unread}</span>` : ''}
              </a>
@@ -74,6 +78,7 @@ export function header(ctx: Ctx, activeKey?: string): string {
                    <div class="dropdown-handle">@${e(u.username)}</div>
                  </div>
                  <a class="dropdown-item" href="/u/${e(u.username)}">${icon('user', 16)}${e(ctx.t('nav.profile'))}</a>
+                 <a class="dropdown-item" href="/messages">${icon('mail', 16)}${e(ctx.t('nav.messages'))}${(ctx.unreadDm ?? 0) > 0 ? ` <span class="dropdown-badge">${ctx.unreadDm}</span>` : ''}</a>
                  <a class="dropdown-item" href="/bookmarks">${icon('bookmark', 16)}${e(ctx.t('nav.bookmarks'))}</a>
                  <a class="dropdown-item" href="/settings">${icon('settings', 16)}${e(ctx.t('nav.settings'))}</a>
                  ${u.role === 'admin' || u.role === 'moderator' ? `<a class="dropdown-item" href="/admin">${icon('shield', 16)}${e(ctx.t('nav.admin'))}</a>` : ''}
@@ -100,8 +105,10 @@ export function header(ctx: Ctx, activeKey?: string): string {
     <a class="mobile-link" href="/">${icon('home', 17)}${e(ctx.t('nav.home'))}</a>
     <a class="mobile-link" href="/?sort=hot">${icon('fire', 17)}${e(ctx.t('nav.hot'))}</a>
     <a class="mobile-link" href="/categories">${icon('listIcon', 17)}${e(ctx.t('nav.categories'))}</a>
+    <a class="mobile-link" href="/tags">${icon('tag', 17)}${e(ctx.t('tags.title'))}</a>
     <a class="mobile-link" href="/new">${icon('plus', 17)}${e(ctx.t('nav.newTopic'))}</a>
-    ${u ? `<a class="mobile-link" href="/notifications">${icon('bell', 17)}${e(ctx.t('nav.notifications'))}</a>` : ''}
+    ${u ? `<a class="mobile-link" href="/notifications">${icon('bell', 17)}${e(ctx.t('nav.notifications'))}</a>
+    <a class="mobile-link" href="/messages">${icon('mail', 17)}${e(ctx.t('nav.messages'))}${(ctx.unreadDm ?? 0) > 0 ? ` (${ctx.unreadDm})` : ''}</a>` : ''}
   </div>
 </header>`;
 }
@@ -143,6 +150,7 @@ export function footer(ctx: Ctx): string {
       <a class="footer-link" href="/">${e(ctx.t('nav.home'))}</a>
       <a class="footer-link" href="/categories">${e(ctx.t('nav.categories'))}</a>
       <a class="footer-link" href="/search">${e(ctx.t('nav.search'))}</a>
+      <a class="footer-link" href="/tags">${e(ctx.t('tags.title'))}</a>
     </div>
     <div class="footer-col">
       <h4>${e(ctx.t('footer.links'))}</h4>

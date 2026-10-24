@@ -591,11 +591,13 @@ export function profilePage(
         <div><strong>${data.likes}</strong><span>${e(ctx.t('user.likesReceived'))}</span></div>
       </div>
       ${data.isSelf ? `<a class="btn btn-outline btn-sm profile-edit" href="/settings">${icon('edit', 15)}${e(ctx.t('user.editProfile'))}</a>` : ''}
+      ${!data.isSelf && ctx.user && p.status !== 'banned' ? `<a class="btn btn-outline btn-sm profile-edit" href="/messages/new/${e(p.username)}">${icon('mail', 15)}${e(ctx.t('dm.new'))}</a>` : ''}
     </section>
     <div class="feed-head">
       <div class="tabs">
         <a class="tab ${data.tab === 'topics' ? 'is-active' : ''}" href="/u/${e(p.username)}">${e(ctx.t('user.topics'))}</a>
         <a class="tab ${data.tab === 'replies' ? 'is-active' : ''}" href="/u/${e(p.username)}?tab=replies">${e(ctx.t('user.replies'))}</a>
+        <a class="tab ${data.tab === 'mentions' ? 'is-active' : ''}" href="/u/${e(p.username)}?tab=mentions">${e(ctx.t('user.mentions'))}</a>
       </div>
     </div>
     <div class="topic-list">${

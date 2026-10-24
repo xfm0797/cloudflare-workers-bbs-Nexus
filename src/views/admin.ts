@@ -1,17 +1,21 @@
 import type { Ctx } from '../types';
 import type { Category, User } from '../lib/types';
 import { formatDate, formatDateTime } from '../lib/i18n';
+import { isMuted } from '../lib/db';
 import { escapeHtml as e } from '../lib/utils';
 import { avatar, csrfField, emptyState, icon, pagination, roleBadge } from './ui';
 import { layout } from './layout';
 
 function adminNav(ctx: Ctx, active: string): string {
+  const isAdminUser = ctx.user?.role === 'admin';
   const items = [
     { key: 'overview', label: ctx.t('admin.dashboard'), href: '/admin', icon: 'home' },
     { key: 'users', label: ctx.t('admin.users'), href: '/admin/users', icon: 'users' },
+    { key: 'topics', label: ctx.t('admin.topics'), href: '/admin/topics', icon: 'message' },
     { key: 'categories', label: ctx.t('admin.categories'), href: '/admin/categories', icon: 'listIcon' },
     { key: 'reports', label: ctx.t('admin.reports'), href: '/admin/reports', icon: 'alert' },
     { key: 'settings', label: ctx.t('admin.siteSettings'), href: '/admin/settings', icon: 'settings' },
+    ...(isAdminUser ? [{ key: 'audit', label: ctx.t('audit.title'), href: '/admin/audit', icon: 'file' }] : []),
   ];
   return `<nav class="admin-nav">
     ${items
@@ -106,7 +110,9 @@ export function adminUsers(
         <td>${
           u.status === 'banned'
             ? `<span class="badge badge-danger">${e(ctx.t('admin.ban'))}</span>`
-            : `<span class="badge badge-ok">${e(ctx.t('misc.online').replace(ctx.t('misc.online'), 'OK'))}</span>`
+            : isMuted(u)
+              ? `<span class="badge badge-warn">${e(ctx.t('admin.mutedUntil', { time: formatDateTime(u.muted_until!, ctx.locale) }))}</span>`
+              : `<span class="badge badge-ok">${e(ctx.t('admin.statusActive'))}</span>`
         }</td>
         <td class="num">${u.topic_count}</td>
         <td class="num">${u.post_count}</td>
@@ -134,6 +140,20 @@ export function adminUsers(
                       <button class="dropdown-item" type="submit">${icon('user', 15)}${e(ctx.t('admin.makeMember'))}</button>
                     </form>
                     <div class="dropdown-sep"></div>
+                    <form method="post" action="/admin/users/${u.id}/mute" class="dropdown-mute">
+                      ${csrfField(ctx)}
+                      ${isMuted(u)
+                        ? `<input type="hidden" name="action" value="unmute" />
+                           <button class="dropdown-item" type="submit">${icon('unlock', 15)}${e(ctx.t('admin.unmute'))}</button>`
+                        : `<input type="hidden" name="action" value="mute" />
+                           <button class="dropdown-item is-danger" type="submit">${icon('lock', 15)}${e(ctx.t('admin.mute'))}</button>
+                           <div class="mute-opts">
+                             <label><input type="radio" name="duration" value="1h" />1h</label>
+                             <label><input type="radio" name="duration" value="24h" checked />24h</label>
+                             <label><input type="radio" name="duration" value="7d" />7d</label>
+                             <label><input type="radio" name="duration" value="30d" />30d</label>
+                           </div>`}
+                    </form>
                     <form method="post" action="/admin/users/${u.id}/status">
                       ${csrfField(ctx)}
                       <input type="hidden" name="status" value="${u.status === 'banned' ? 'active' : 'banned'}" />
@@ -168,6 +188,146 @@ export function adminUsers(
       ${pagination(ctx, data.page, data.totalPages, '/admin/users', new URLSearchParams(data.q ? { q: data.q } : {}))}
     </section>`;
   return shell(ctx, 'users', ctx.t('admin.users'), body);
+}
+
+/* ------------------------------------------------------------------ 帖子管理 */
+
+export interface AdminTopicRow {
+  id: number;
+  title: string;
+  is_pinned: number;
+  is_locked: number;
+  is_featured: number;
+  is_deleted: number;
+  reply_count: number;
+  like_count: number;
+  views: number;
+  created_at: number;
+  author_username: string;
+  author_name: string;
+  category_name: string;
+}
+
+const topicStatusBadges = (ctx: Ctx, t: AdminTopicRow): string =>
+  [
+    t.is_pinned ? `<span class="badge badge-ok">${e(ctx.t('admin.statusPinned'))}</span>` : '',
+    t.is_locked ? `<span class="badge">${e(ctx.t('admin.statusLocked'))}</span>` : '',
+    t.is_featured ? `<span class="badge">${e(ctx.t('admin.statusFeatured'))}</span>` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+function topicActionForm(ctx: Ctx, t: AdminTopicRow, action: string, label: string, danger = false): string {
+  return `<form method="post" action="/admin/topics/${t.id}">
+    ${csrfField(ctx)}
+    <input type="hidden" name="action" value="${action}" />
+    <input type="hidden" name="q" value="${e(ctx.query.get('q') || '')}" />
+    <input type="hidden" name="status" value="${e(ctx.query.get('status') || '')}" />
+    <button class="dropdown-item ${danger ? 'is-danger' : ''}" type="submit">${e(label)}</button>
+  </form>`;
+}
+
+export function adminTopics(
+  ctx: Ctx,
+  data: { tab: 'topics' | 'replies'; q: string; status: string; page: number; totalPages: number; topics: AdminTopicRow[]; replies: any[] },
+): string {
+  const qp = new URLSearchParams();
+  if (data.q) qp.set('q', data.q);
+  if (data.status) qp.set('status', data.status);
+
+  const tabs = `<div class="tabs">
+    <a class="tab ${data.tab === 'topics' ? 'is-active' : ''}" href="/admin/topics?tab=topics${data.q ? `&q=${encodeURIComponent(data.q)}` : ''}">${e(ctx.t('admin.tabTopics'))}</a>
+    <a class="tab ${data.tab === 'replies' ? 'is-active' : ''}" href="/admin/topics?tab=replies${data.q ? `&q=${encodeURIComponent(data.q)}` : ''}">${e(ctx.t('admin.tabReplies'))}</a>
+  </div>`;
+
+  const statusFilter = (key: string, label: string) =>
+    `<a class="chip ${data.status === key ? 'is-active' : ''}" href="/admin/topics?tab=${data.tab}${data.q ? `&q=${encodeURIComponent(data.q)}` : ''}${key ? `&status=${key}` : ''}">${e(label)}</a>`;
+
+  const topicRows = data.topics
+    .map((t) => {
+      const staffActions = [
+        topicActionForm(ctx, t, t.is_pinned ? 'unpin' : 'pin', ctx.t(t.is_pinned ? 'admin.unpin' : 'admin.pin')),
+        topicActionForm(ctx, t, t.is_locked ? 'unlock' : 'lock', ctx.t(t.is_locked ? 'admin.unlock' : 'admin.lock')),
+        topicActionForm(ctx, t, 'feature', ctx.t('admin.feature')),
+        topicActionForm(ctx, t, 'delete', ctx.t('admin.delete'), true),
+      ].join('');
+      return `<tr>
+        <td>
+          <div class="table-user">
+            <div>
+              <a href="/t/${t.id}"><strong>${e(t.title)}</strong></a>
+              <span>${e(t.author_name)} · ${e(t.category_name)} · ${e(formatDate(t.created_at, ctx.locale))}</span>
+            </div>
+          </div>
+        </td>
+        <td>${topicStatusBadges(ctx, t) || '<span class="muted">—</span>'}</td>
+        <td class="num">${t.reply_count}</td>
+        <td class="num">${t.views}</td>
+        <td>
+          <details class="dropdown row-actions">
+            <summary class="btn btn-ghost btn-xs">${icon('settings', 14)}${e(ctx.t('admin.actions'))}</summary>
+            <div class="dropdown-panel">${staffActions}</div>
+          </details>
+        </td>
+      </tr>`;
+    })
+    .join('');
+
+  const replyRows = data.replies
+    .map((p) => {
+      const excerpt = p.content.length > 80 ? p.content.slice(0, 80) + '…' : p.content;
+      return `<tr class="${p.is_deleted ? 'is-muted-row' : ''}">
+        <td>
+          <div class="table-user">
+            ${avatar({ name: p.author_name, username: p.author_username, url: p.author_avatar, size: 28 })}
+            <div>
+              <a href="/t/${p.topic_id}#p${p.id}"><strong>${e(p.author_name)}</strong></a>
+              <span>${e(excerpt)}</span>
+            </div>
+          </div>
+        </td>
+        <td>${p.is_deleted ? `<span class="badge badge-danger">${e(ctx.t('admin.statusDeleted'))}</span>` : '<span class="muted">—</span>'}</td>
+        <td class="num muted">${e(formatDate(p.created_at, ctx.locale))}</td>
+        <td>
+          ${
+            p.is_deleted
+              ? '<span class="muted">—</span>'
+              : `<form method="post" action="/admin/posts/${p.id}/delete">${csrfField(ctx)}<button class="btn btn-ghost btn-xs is-danger-text" type="submit">${icon('trash', 14)}${e(ctx.t('admin.delete'))}</button></form>`
+          }
+        </td>
+      </tr>`;
+    })
+    .join('');
+
+  const body = `<section class="card">
+      <div class="card-head">
+        <h2>${e(ctx.t('admin.topics'))}</h2>
+        <form class="inline-search" method="get" action="/admin/topics">
+          <input type="hidden" name="tab" value="${data.tab}" />
+          ${icon('search', 15)}<input type="search" name="q" value="${e(data.q)}" placeholder="${e(ctx.t('admin.userSearch'))}" />
+        </form>
+      </div>
+      ${tabs}
+      ${
+        data.tab === 'topics'
+          ? `<div class="chip-row">${statusFilter('', ctx.t('admin.filterAll'))}${statusFilter('locked', ctx.t('admin.statusLocked'))}${statusFilter('pinned', ctx.t('admin.statusPinned'))}${statusFilter('featured', ctx.t('admin.statusFeatured'))}</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>${e(ctx.t('admin.tabTopics'))}</th><th>${e(ctx.t('admin.status'))}</th><th>${e(ctx.t('user.replies'))}</th><th>${e(ctx.t('home.stats.views'))}</th><th></th></tr></thead>
+          <tbody>${topicRows || `<tr><td colspan="5" class="empty-cell">${e(ctx.t('state.empty'))}</td></tr>`}</tbody>
+        </table>
+      </div>
+      ${pagination(ctx, data.page, data.totalPages, '/admin/topics', qp)}`
+          : `<div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>${e(ctx.t('admin.tabReplies'))}</th><th>${e(ctx.t('admin.status'))}</th><th>${e(ctx.t('admin.date'))}</th><th></th></tr></thead>
+          <tbody>${replyRows || `<tr><td colspan="4" class="empty-cell">${e(ctx.t('state.empty'))}</td></tr>`}</tbody>
+        </table>
+      </div>`
+      }
+    </section>`;
+
+  return shell(ctx, 'topics', ctx.t('admin.topics'), body);
 }
 
 export function adminCategories(ctx: Ctx, data: { categories: Category[]; edit?: Category | null }): string {
@@ -355,4 +515,79 @@ export function adminSettings(ctx: Ctx, settings: Record<string, string>): strin
       </div>
     </section>`;
   return shell(ctx, 'settings', ctx.t('admin.siteSettings'), body);
+}
+
+/* ------------------------------------------------------------------ 审计日志 */
+
+const AUDIT_ACTION_KEYS: Record<string, string> = {
+  'user.role': 'audit.user.role',
+  'user.ban': 'audit.user.ban',
+  'user.unban': 'audit.user.unban',
+  'user.mute': 'audit.user.mute',
+  'user.mute.1h': 'audit.user.muteTime',
+  'user.mute.24h': 'audit.user.muteTime',
+  'user.mute.7d': 'audit.user.muteTime',
+  'user.mute.30d': 'audit.user.muteTime',
+  'user.unmute': 'audit.user.unmute',
+  'topic.pin': 'audit.topic.pin',
+  'topic.unpin': 'audit.topic.unpin',
+  'topic.lock': 'audit.topic.lock',
+  'topic.unlock': 'audit.topic.unlock',
+  'topic.feature': 'audit.topic.feature',
+  'topic.delete': 'audit.topic.delete',
+  'topic.restore': 'audit.topic.restore',
+  'post.delete': 'audit.post.delete',
+  'category.create': 'audit.category.create',
+  'category.update': 'audit.category.update',
+  'category.delete': 'audit.category.delete',
+  'report.resolved': 'audit.report.resolved',
+  'report.dismissed': 'audit.report.dismissed',
+};
+
+export function adminAudit(ctx: Ctx, logs: any[]): string {
+  const rows = logs
+    .map((a) => {
+      const key = AUDIT_ACTION_KEYS[a.action] || 'audit.unknown';
+      const detail = a.action.startsWith('user.mute.')
+        ? ctx.t('audit.muteDetail', { duration: a.action.split('.')[2] || '' })
+        : a.action === 'user.role'
+          ? ctx.t('audit.roleDetail', { role: a.detail })
+          : a.detail;
+      const targetLink =
+        a.target_type === 'topic' && a.target_id
+          ? `<a href="/t/${e(a.target_id)}">#${e(a.target_id)}</a>`
+          : a.target_type === 'user' && a.target_id
+            ? `<code class="muted">${e(String(a.target_id).slice(0, 8))}…</code>`
+            : a.target_id
+              ? `<code class="muted">${e(a.target_id)}</code>`
+              : '';
+      return `<tr>
+        <td>
+          <div class="table-user">
+            ${avatar({ name: a.actor_name || '?', username: a.actor_username || '', url: a.actor_avatar, size: 26 })}
+            <span>${a.actor_username ? `<a href="/u/${e(a.actor_username)}">${e(a.actor_name || a.actor_username)}</a>` : `<span class="muted">${e(a.actor_name || '?')}</span>`}</span>
+          </div>
+        </td>
+        <td><span class="badge">${e(ctx.t(key))}</span></td>
+        <td>${targetLink}</td>
+        <td class="muted">${e(detail)}</td>
+        <td class="num muted">${e(formatDateTime(a.created_at, ctx.locale))}</td>
+      </tr>`;
+    })
+    .join('');
+
+  const body = `<section class="card">
+      <div class="card-head"><h2>${e(ctx.t('audit.title'))}</h2><span class="muted">${e(ctx.t('audit.desc'))}</span></div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>${e(ctx.t('audit.actor'))}</th><th>${e(ctx.t('audit.action'))}</th>
+            <th>${e(ctx.t('audit.target'))}</th><th>${e(ctx.t('audit.detail'))}</th><th>${e(ctx.t('admin.date'))}</th>
+          </tr></thead>
+          <tbody>${rows || `<tr><td colspan="5" class="empty-cell">${e(ctx.t('state.empty'))}</td></tr>`}</tbody>
+        </table>
+      </div>
+    </section>`;
+
+  return shell(ctx, 'audit', ctx.t('audit.title'), body);
 }

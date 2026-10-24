@@ -463,6 +463,56 @@
     });
   }
 
+  /* ---------------------------------------------------------------- 草稿自动保存 */
+
+  // 规则：/new 页的标题+正文、主题回复框、私信输入框，按路径维度存 localStorage
+  var draftTargets = [];
+  var newContent = document.getElementById('content');
+  var newTitle = document.getElementById('title');
+  if (newContent && newTitle) {
+    draftTargets.push([newTitle, 'cfbbs-draft:new:title']);
+    draftTargets.push([newContent, 'cfbbs-draft:new:content']);
+  }
+  var replyBox = document.getElementById('replyContent');
+  var topicMatch = location.pathname.match(/^\/t\/(\d+)/);
+  if (replyBox && topicMatch) draftTargets.push([replyBox, 'cfbbs-draft:reply:' + topicMatch[1]]);
+  document.querySelectorAll('.dm-compose textarea[name="body"]').forEach(function (el) {
+    draftTargets.push([el, 'cfbbs-draft:dm:' + location.pathname]);
+  });
+
+  draftTargets.forEach(function (pair) {
+    var el = pair[0];
+    var key = pair[1];
+    var timer = null;
+
+    try {
+      var saved = localStorage.getItem(key);
+      if (saved && !el.value) {
+        el.value = saved;
+        el.dispatchEvent(new Event('input', { bubbles: false }));
+      }
+    } catch (e) {}
+
+    el.addEventListener('input', function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        try {
+          if (el.value.trim()) localStorage.setItem(key, el.value);
+          else localStorage.removeItem(key);
+        } catch (e) {}
+      }, 600);
+    });
+
+    // 提交成功即清除（跟随表单提交；失败时刷新会恢复）
+    if (el.form) {
+      el.form.addEventListener('submit', function () {
+        try {
+          localStorage.removeItem(key);
+        } catch (e) {}
+      });
+    }
+  });
+
   /* ---------------------------------------------------------------- auto-grow */
 
   document.querySelectorAll('textarea.auto-grow').forEach(function (el) {

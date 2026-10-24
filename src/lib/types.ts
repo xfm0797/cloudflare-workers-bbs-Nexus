@@ -19,6 +19,7 @@ export interface User {
   post_count: number;
   reputation: number;
   last_seen_at: number | null;
+  muted_until?: number | null;
   created_at: number;
 }
 

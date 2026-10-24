@@ -475,4 +475,248 @@ export async function touchUser(env: Env, user: User): Promise<void> {
   await env.DB.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').bind(Date.now(), user.id).run();
 }
 
+/* ------------------------------------------------------------------ 私信 */
+
+export interface ConversationRow {
+  id: number;
+  user_a_id: string;
+  user_b_id: string;
+  last_message_at: number;
+  last_message_preview: string;
+  a_unread: number;
+  b_unread: number;
+  other_id: string;
+  other_username: string;
+  other_name: string;
+  other_avatar: string | null;
+  unread: number;
+}
+
+/** 每对用户固定一条会话：字典序小的 id 存 a 列 */
+export async function getOrCreateConversation(env: Env, userA: string, userB: string): Promise<ConversationRow['id']> {
+  const [a, b] = userA < userB ? [userA, userB] : [userB, userA];
+  const existing = await first<{ id: number }>(
+    env,
+    'SELECT id FROM conversations WHERE user_a_id = ? AND user_b_id = ?',
+    a,
+    b,
+  );
+  if (existing) return existing.id;
+  const res = await env.DB.prepare(
+    'INSERT OR IGNORE INTO conversations (user_a_id, user_b_id, last_message_at) VALUES (?, ?, ?)',
+  )
+    .bind(a, b, Date.now())
+    .run();
+  if (Number(res.meta.last_row_id) > 0) return Number(res.meta.last_row_id);
+  const retry = await first<{ id: number }>(
+    env,
+    'SELECT id FROM conversations WHERE user_a_id = ? AND user_b_id = ?',
+    a,
+    b,
+  );
+  return retry?.id ?? 0;
+}
+
+export async function listConversations(env: Env, userId: string, limit = 50): Promise<ConversationRow[]> {
+  return all<ConversationRow>(
+    env,
+    `SELECT c.*, o.id AS other_id, o.username AS other_username, o.display_name AS other_name, o.avatar_url AS other_avatar,
+            CASE WHEN c.user_a_id = ? THEN c.a_unread ELSE c.b_unread END AS unread
+     FROM conversations c
+     JOIN users o ON o.id = CASE WHEN c.user_a_id = ? THEN c.user_b_id ELSE c.user_a_id END
+     WHERE c.user_a_id = ? OR c.user_b_id = ?
+     ORDER BY c.last_message_at DESC LIMIT ?`,
+    userId,
+    userId,
+    userId,
+    userId,
+    limit,
+  );
+}
+
+export async function getConversation(
+  env: Env,
+  id: number,
+  userId: string,
+): Promise<ConversationRow | null> {
+  const row = await first<ConversationRow>(
+    env,
+    `SELECT c.*, o.id AS other_id, o.username AS other_username, o.display_name AS other_name, o.avatar_url AS other_avatar,
+            CASE WHEN c.user_a_id = ? THEN c.a_unread ELSE c.b_unread END AS unread
+     FROM conversations c
+     JOIN users o ON o.id = CASE WHEN c.user_a_id = ? THEN c.user_b_id ELSE c.user_a_id END
+     WHERE c.id = ? AND (c.user_a_id = ? OR c.user_b_id = ?)`,
+    userId,
+    userId,
+    id,
+    userId,
+    userId,
+  );
+  return row;
+}
+
+export async function listMessages(
+  env: Env,
+  conversationId: number,
+  before?: number,
+  limit = 50,
+): Promise<any[]> {
+  if (before) {
+    return all<any>(
+      env,
+      `SELECT m.*, u.username AS sender_username, u.display_name AS sender_name, u.avatar_url AS sender_avatar
+       FROM messages m JOIN users u ON u.id = m.sender_id
+       WHERE m.conversation_id = ? AND m.is_deleted = 0 AND m.id < ?
+       ORDER BY m.id DESC LIMIT ?`,
+      conversationId,
+      before,
+      limit,
+    );
+  }
+  const rows = await all<any>(
+    env,
+    `SELECT m.*, u.username AS sender_username, u.display_name AS sender_name, u.avatar_url AS sender_avatar
+     FROM messages m JOIN users u ON u.id = m.sender_id
+     WHERE m.conversation_id = ? AND m.is_deleted = 0
+     ORDER BY m.id DESC LIMIT ?`,
+    conversationId,
+    limit,
+  );
+  return rows.reverse();
+}
+
+/** 发送私信：写入消息 + 更新会话预览/未读数，一个 batch 保证一致性 */
+export async function sendMessage(
+  env: Env,
+  conversationId: number,
+  senderId: string,
+  body: string,
+): Promise<number> {
+  const now = Date.now();
+  const html = renderMarkdown(body);
+  const preview = excerptOf(body).slice(0, 120);
+  const res = await env.DB.prepare(
+    `INSERT INTO messages (conversation_id, sender_id, body, body_html, created_at) VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(conversationId, senderId, body, html, now)
+    .run();
+  const messageId = Number(res.meta.last_row_id);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE conversations SET last_message_at = ?, last_message_preview = ?,
+        a_unread = a_unread + (CASE WHEN user_a_id != ? THEN 1 ELSE 0 END),
+        b_unread = b_unread + (CASE WHEN user_b_id != ? THEN 1 ELSE 0 END)
+       WHERE id = ?`,
+    ).bind(now, preview, senderId, senderId, conversationId),
+  ]);
+  return messageId;
+}
+
+/** 打开会话即已读：把对方发来的未读清零 */
+export async function markConversationRead(env: Env, conversation: ConversationRow, userId: string): Promise<void> {
+  if (conversation.unread <= 0) return;
+  const col = conversation.user_a_id === userId ? 'a_unread' : 'b_unread';
+  await env.DB.prepare(`UPDATE conversations SET ${col} = 0 WHERE id = ?`).bind(conversation.id).run();
+}
+
+export async function unreadConversations(env: Env, userId: string): Promise<number> {
+  const row = await first<{ n: number }>(
+    env,
+    'SELECT COALESCE(SUM(CASE WHEN user_a_id = ? THEN a_unread ELSE b_unread END), 0) AS n FROM conversations WHERE user_a_id = ? OR user_b_id = ?',
+    userId,
+    userId,
+    userId,
+  );
+  return row?.n ?? 0;
+}
+
+/** 提及某用户的帖子所在的主题（按 @username 文本匹配，排除主题作者本人的自我提及） */
+export async function topicsMentioning(env: Env, username: string, userId: string, limit = 30): Promise<TopicRow[]> {
+  const pattern = `%@${username.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  return all<TopicRow>(
+    env,
+    `${TOPIC_SELECT}
+     WHERE t.is_deleted = 0 AND EXISTS (
+       SELECT 1 FROM posts p
+       WHERE p.topic_id = t.id AND p.is_deleted = 0 AND p.author_id != ?
+         AND p.content LIKE ? ESCAPE '\\'
+     )
+     ORDER BY t.last_post_at DESC LIMIT ?`,
+    userId,
+    pattern,
+    limit,
+  );
+}
+
+/* ------------------------------------------------------------------ 标签 */
+
+/** 热门标签（近期非删除主题的 tags 聚合） */
+export async function popularTags(env: Env, limit = 30): Promise<{ name: string; count: number }[]> {
+  const rows = await all<{ tags: string }>(
+    env,
+    'SELECT tags FROM topics WHERE is_deleted = 0 AND tags != \'\' ORDER BY last_post_at DESC LIMIT 5000',
+  );
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    for (const raw of r.tags.split(',')) {
+      const name = raw.trim();
+      if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
+
+export async function topicsByTag(
+  env: Env,
+  tag: string,
+  page = 1,
+  perPage = 20,
+): Promise<{ topics: TopicRow[]; total: number; totalPages: number; page: number }> {
+  const pattern = `%,${tag.replace(/[\\%_]/g, (m) => `\\${m}`)},%`;
+  const where = `WHERE t.is_deleted = 0 AND (',' || t.tags || ',') LIKE ? ESCAPE '\\'`;
+  const topics = await all<TopicRow>(
+    env,
+    `${TOPIC_SELECT} ${where} ORDER BY t.is_pinned DESC, t.last_post_at DESC LIMIT ? OFFSET ?`,
+    pattern,
+    perPage,
+    (page - 1) * perPage,
+  );
+  const countRow = await first<{ n: number }>(env, `SELECT COUNT(*) AS n FROM topics t ${where}`, pattern);
+  const total = countRow?.n ?? 0;
+  return { topics, total, totalPages: Math.max(1, Math.ceil(total / perPage)), page };
+}
+
+/* ------------------------------------------------------------------ 审计日志 */
+
+export async function logAudit(
+  env: Env,
+  input: { actorId: string; action: string; targetType: string; targetId?: string | number; detail?: string },
+): Promise<void> {
+  await env.DB.prepare(
+    'INSERT INTO audit_logs (actor_id, action, target_type, target_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+  )
+    .bind(input.actorId, input.action, input.targetType, String(input.targetId ?? ''), input.detail ?? '', Date.now())
+    .run();
+}
+
+export async function listAuditLogs(env: Env, limit = 100): Promise<any[]> {
+  return all<any>(
+    env,
+    `SELECT a.*, u.username AS actor_username, u.display_name AS actor_name, u.avatar_url AS actor_avatar
+     FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_id
+     ORDER BY a.created_at DESC LIMIT ?`,
+    limit,
+  );
+}
+
+/* ------------------------------------------------------------------ 禁言 */
+
+/** 用户是否处于禁言中（muted_until 在未来） */
+export function isMuted(user: { muted_until?: number | null }): boolean {
+  return !!user.muted_until && user.muted_until > Date.now();
+}
+
 export type { Category, Post, Topic, TopicRow, User };

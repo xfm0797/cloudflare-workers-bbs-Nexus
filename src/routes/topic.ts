@@ -12,6 +12,7 @@ import {
   notify,
   notifyMentions,
 } from '../lib/db';
+import { isMuted } from '../lib/db';
 import { buildSidebar } from '../views/layout';
 import { composePage, errorPage, topicPage } from '../views/pages';
 import { parseIntParam } from '../lib/utils';
@@ -83,6 +84,7 @@ get('/new', async (ctx) => {
 post('/new', async (ctx) => {
   if (!ctx.user) return ctx.redirect('/login?next=/new');
   if (!canWrite(ctx)) return ctx.html(errorPage(ctx, 403, ctx.t('auth.banned')), 403);
+  if (isMuted(ctx.user)) return ctx.html(errorPage(ctx, 403, ctx.t('user.muted')), 403);
 
   // 站点开启「必须验证邮箱」时，未验证用户只能看不能发
   if (needsEmailVerification(ctx.env, ctx.user)) {
@@ -137,6 +139,7 @@ post('/t/:id/reply', async (ctx) => {
   const id = parseIntParam(ctx.params.id, 0);
   if (!ctx.user) return ctx.redirect(`/login?next=/t/${id}`);
   if (!canWrite(ctx)) return ctx.html(errorPage(ctx, 403, ctx.t('auth.banned')), 403);
+  if (isMuted(ctx.user)) return ctx.redirect(`/t/${id}`, 'user.muted', 'error');
   if (needsEmailVerification(ctx.env, ctx.user)) return ctx.redirect(`/t/${id}`, 'email.blocked', 'error');
 
   const topic = await getTopic(ctx.env, id);

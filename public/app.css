@@ -3291,3 +3291,62 @@ select {
 .mobile-menu[hidden] {
   display: none;
 }
+
+/* ------------------------------------------------------------------ 私信 */
+.dm-item{display:flex;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border);text-decoration:none;color:inherit}
+.dm-item:hover{background:var(--hover,rgba(128,128,128,.08))}
+.dm-item.is-unread{background:rgba(99,102,241,.07)}
+.dm-body{flex:1;min-width:0}
+.dm-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dm-row+.dm-row{margin-top:2px}
+.dm-time{font-size:12px;color:var(--text-secondary,#888);white-space:nowrap}
+.dm-preview{font-size:13px;color:var(--text-secondary,#888);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dm-badge{background:var(--primary,#6366f1);color:#fff;font-size:11px;font-weight:600;border-radius:99px;padding:1px 7px;white-space:nowrap}
+.dm-list{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:12px;background:var(--surface,#fff)}
+.dm-new{margin-top:12px}
+.dm-new-form{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.dm-new-label{font-size:13px;color:var(--text-secondary,#888)}
+.dm-new-form input{flex:1;min-width:160px}
+.dm-head h1{display:flex;align-items:center;gap:8px;margin-top:6px}
+.dm-back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary,#888);text-decoration:none}
+.dm-back:hover{color:var(--text,#111)}
+.dm-thread{display:flex;flex-direction:column;gap:14px;margin:16px 0}
+.dm-msg{display:flex;gap:10px;max-width:85%}
+.dm-msg.is-mine{align-self:flex-end;flex-direction:row-reverse}
+.dm-bubble{background:var(--surface,#fff);border:1px solid var(--border);border-radius:14px;padding:8px 14px 10px;min-width:0}
+.dm-msg.is-mine .dm-bubble{background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3)}
+.dm-bubble-head{display:flex;gap:8px;align-items:baseline;font-size:12px;color:var(--text-secondary,#888);margin-bottom:4px}
+.dm-bubble-head a{font-weight:600;color:var(--text,#111);text-decoration:none}
+.dm-bubble-body{font-size:14px;line-height:1.6;word-break:break-word}
+.dm-bubble-body img{max-width:100%;border-radius:8px}
+.dm-bubble-body pre{overflow-x:auto}
+.dm-compose{display:flex;gap:10px;align-items:flex-end;position:sticky;bottom:12px;background:var(--bg,#fff);padding:10px;border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.dm-compose textarea{flex:1;resize:vertical}
+.dropdown-badge{background:var(--primary,#6366f1);color:#fff;font-size:11px;font-weight:600;border-radius:99px;padding:0 6px;margin-left:auto}
+@media (max-width:640px){.dm-msg{max-width:95%}}
+
+/* ------------------------------------------------------------------ 标签页 */
+.tag-cloud{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.tag-cloud-item{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:99px;border:1px solid var(--border);background:var(--surface,#fff);color:var(--text,#111);text-decoration:none;font-size:14px}
+.tag-cloud-item span{font-size:12px;color:var(--text-secondary,#888)}
+.tag-cloud-item:hover{border-color:var(--primary,#6366f1);color:var(--primary,#6366f1)}
+.tag-lv1{font-size:13px}
+.tag-lv2{font-size:14px}
+.tag-lv3{font-size:15px;font-weight:500}
+.tag-lv4{font-size:16px;font-weight:600}
+.tag-lv5{font-size:18px;font-weight:700}
+.tag-hash{color:var(--primary,#6366f1);margin-right:2px}
+
+/* ------------------------------------------------------------------ 后台筛选 chip */
+.chip-row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.chip{display:inline-flex;align-items:center;padding:4px 12px;border-radius:99px;border:1px solid var(--border);font-size:13px;color:var(--text-secondary,#666);text-decoration:none}
+.chip:hover{border-color:var(--primary,#6366f1);color:var(--primary,#6366f1)}
+.chip.is-active{background:var(--primary,#6366f1);border-color:var(--primary,#6366f1);color:#fff}
+.is-muted-row td{opacity:.55}
+.is-danger-text{color:var(--danger,#dc2626)}
+
+/* ------------------------------------------------------------------ 审计 & 禁言 */
+.badge-warn{background:rgba(245,158,11,.15);color:#b45309}
+.mute-opts{display:flex;gap:6px;flex-wrap:wrap;padding:6px 14px 10px;font-size:12px;color:var(--text-secondary,#666)}
+.mute-opts label{display:inline-flex;align-items:center;gap:3px;cursor:pointer}
+.dropdown-mute{padding:0}

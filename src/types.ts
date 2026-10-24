@@ -18,6 +18,7 @@ export interface Ctx {
   siteName: string;
   settings: Record<string, string>;
   unread: number;
+  unreadDm?: number;
   flash?: { type: 'ok' | 'error'; text: string } | null;
   html: (body: string, status?: number, init?: ResponseInit) => Response;
   redirect: (path: string, msg?: string, type?: 'ok' | 'error') => Response;

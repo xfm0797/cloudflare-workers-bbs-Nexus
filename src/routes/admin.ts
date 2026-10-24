@@ -5,8 +5,10 @@ import {
   getSettings,
   setSetting,
   stats as fetchStats,
+  logAudit,
+  listAuditLogs,
 } from '../lib/db';
-import { adminCategories, adminOverview, adminReports, adminSettings, adminUsers } from '../views/admin';
+import { adminAudit, adminCategories, adminOverview, adminReports, adminSettings, adminTopics, adminUsers } from '../views/admin';
 import { errorPage } from '../views/pages';
 import { isAdmin, isStaff } from '../lib/auth';
 import { parseIntParam } from '../lib/utils';
@@ -87,6 +89,7 @@ post('/admin/users/:id/role', async (ctx) => {
   if (!ADMIN_ROLES.has(role)) return ctx.html(errorPage(ctx, 400, ctx.t('error.badRequest')), 400);
 
   await ctx.env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(role, ctx.params.id).run();
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: 'user.role', targetType: 'user', targetId: ctx.params.id, detail: role });
   return ctx.redirect('/admin/users', 'admin.userUpdated');
 });
 
@@ -99,6 +102,37 @@ post('/admin/users/:id/status', async (ctx) => {
   if (status !== 'active' && status !== 'banned') return ctx.html(errorPage(ctx, 400, ctx.t('error.badRequest')), 400);
 
   await ctx.env.DB.prepare('UPDATE users SET status = ? WHERE id = ?').bind(status, ctx.params.id).run();
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: `user.${status === 'banned' ? 'ban' : 'unban'}`, targetType: 'user', targetId: ctx.params.id });
+  return ctx.redirect('/admin/users', 'admin.userUpdated');
+});
+
+/** 禁言 / 解除禁言（时长由 duration 表单字段决定） */
+const MUTE_DURATIONS: Record<string, number> = {
+  '1h': 3600_000,
+  '24h': 86_400_000,
+  '7d': 7 * 86_400_000,
+  '30d': 30 * 86_400_000,
+};
+
+post('/admin/users/:id/mute', async (ctx) => {
+  const denied = guard(ctx, true);
+  if (denied) return denied;
+  if (ctx.params.id === ctx.user!.id) return ctx.redirect('/admin/users', 'error.noPermission', 'error');
+
+  const action = String(ctx.form?.get('action') || '');
+  let mutedUntil: number | null = null;
+  let auditAction = 'user.unmute';
+
+  if (action === 'mute') {
+    const duration = String(ctx.form?.get('duration') || '');
+    const ms = MUTE_DURATIONS[duration];
+    if (!ms) return ctx.html(errorPage(ctx, 400, ctx.t('error.badRequest')), 400);
+    mutedUntil = Date.now() + ms;
+    auditAction = `user.mute.${duration}`;
+  }
+
+  await ctx.env.DB.prepare('UPDATE users SET muted_until = ? WHERE id = ?').bind(mutedUntil, ctx.params.id).run();
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: auditAction, targetType: 'user', targetId: ctx.params.id });
   return ctx.redirect('/admin/users', 'admin.userUpdated');
 });
 
@@ -145,6 +179,7 @@ post('/admin/categories', async (ctx) => {
   )
     .bind(d.slug, d.name, d.name_en || null, d.description || null, d.description_en || null, d.icon, d.color, d.position, d.admin_only, Date.now())
     .run();
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: 'category.create', targetType: 'category', targetId: d.slug });
   return ctx.redirect('/admin/categories', 'admin.categoryUpdated');
 });
 
@@ -166,6 +201,7 @@ post('/admin/categories/:id', async (ctx) => {
   )
     .bind(d.slug, d.name, d.name_en || null, d.description || null, d.description_en || null, d.icon, d.color, d.position, d.admin_only, id)
     .run();
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: 'category.update', targetType: 'category', targetId: d.slug });
   return ctx.redirect('/admin/categories', 'admin.categoryUpdated');
 });
 
@@ -180,7 +216,162 @@ post('/admin/categories/:id/delete', async (ctx) => {
   if ((topics?.n ?? 0) > 0) return ctx.redirect('/admin/categories', 'admin.categoryInUse', 'error');
 
   await ctx.env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(id).run();
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: 'category.delete', targetType: 'category', targetId: cat.slug });
   return ctx.redirect('/admin/categories', 'admin.categoryDeleted');
+});
+
+/* ------------------------------------------------------------------ 帖子管理 */
+
+const TOPIC_STATUS_SQL: Record<string, string> = {
+  locked: 't.is_locked = 1',
+  pinned: 't.is_pinned = 1',
+  featured: 't.is_featured = 1',
+};
+
+get('/admin/topics', async (ctx) => {
+  const denied = guard(ctx);
+  if (denied) return denied;
+
+  const q = (ctx.query.get('q') || '').trim().slice(0, 60);
+  const status = ctx.query.get('status') || '';
+  const tab = ctx.query.get('tab') === 'replies' ? 'replies' : 'topics';
+  const page = Math.max(1, parseIntParam(ctx.query.get('page'), 1));
+  const perPage = 25;
+
+  if (tab === 'replies') {
+    const where = q ? 'WHERE p.is_deleted = 0 AND p.content LIKE ?' : 'WHERE p.is_deleted = 0';
+    const params = q ? [`%${q}%`] : [];
+    const [rows, total] = await Promise.all([
+      ctx.env.DB.prepare(
+        `SELECT p.id, p.topic_id, p.content, p.is_deleted, p.created_at,
+                u.username AS author_username, u.display_name AS author_name, u.avatar_url AS author_avatar
+         FROM posts p JOIN users u ON u.id = p.author_id
+         ${where} ORDER BY p.created_at DESC LIMIT ? OFFSET ?`,
+      )
+        .bind(...params, perPage, (page - 1) * perPage)
+        .all<any>(),
+      ctx.env.DB.prepare(`SELECT COUNT(*) AS n FROM posts p ${where}`).bind(...params).first<{ n: number }>(),
+    ]);
+    return ctx.html(
+      adminTopics(ctx, {
+        tab,
+        q,
+        status,
+        page,
+        totalPages: Math.max(1, Math.ceil((total?.n ?? 0) / perPage)),
+        topics: [],
+        replies: rows.results ?? [],
+      }),
+    );
+  }
+
+  const statusSql = TOPIC_STATUS_SQL[status];
+  const clauses: string[] = ['t.is_deleted = 0'];
+  const params: unknown[] = [];
+  if (statusSql) clauses.push(statusSql);
+  if (q) {
+    clauses.push('(t.title LIKE ? OR t.excerpt LIKE ?)');
+    params.push(`%${q}%`, `%${q}%`);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+  const [rows, total] = await Promise.all([
+    ctx.env.DB.prepare(
+      `SELECT t.id, t.title, t.is_pinned, t.is_locked, t.is_featured, t.is_deleted,
+              t.reply_count, t.like_count, t.views, t.created_at,
+              u.username AS author_username, u.display_name AS author_name,
+              c.name AS category_name
+       FROM topics t
+       JOIN users u ON u.id = t.author_id
+       JOIN categories c ON c.id = t.category_id
+       ${where} ORDER BY t.created_at DESC LIMIT ? OFFSET ?`,
+    )
+      .bind(...params, perPage, (page - 1) * perPage)
+      .all<any>(),
+    ctx.env.DB.prepare(`SELECT COUNT(*) AS n FROM topics t ${where}`).bind(...params).first<{ n: number }>(),
+  ]);
+
+  return ctx.html(
+    adminTopics(ctx, {
+      tab,
+      q,
+      status,
+      page,
+      totalPages: Math.max(1, Math.ceil((total?.n ?? 0) / perPage)),
+      topics: rows.results ?? [],
+      replies: [],
+    }),
+  );
+});
+
+post('/admin/topics/:id', async (ctx) => {
+  const denied = guard(ctx);
+  if (denied) return denied;
+  const id = parseIntParam(ctx.params.id, 0);
+  const action = String(ctx.form?.get('action') || '');
+  const now = Date.now();
+
+  // 硬删除：连同回复、点赞、收藏、通知一并清除，并回收计数
+  if (action === 'delete') {
+    const topic = await ctx.env.DB.prepare('SELECT id, author_id, category_id, reply_count FROM topics WHERE id = ?')
+      .bind(id)
+      .first<any>();
+    if (!topic) return ctx.html(errorPage(ctx, 404), 404);
+
+    await ctx.env.DB.batch([
+      ctx.env.DB.prepare('DELETE FROM posts WHERE topic_id = ?').bind(id),
+      ctx.env.DB.prepare('DELETE FROM search_index WHERE topic_id = ? AND kind = \'topic\'').bind(id),
+      ctx.env.DB.prepare('DELETE FROM likes WHERE target_type = \'topic\' AND target_id = ?').bind(id),
+      ctx.env.DB.prepare('DELETE FROM bookmarks WHERE topic_id = ?').bind(id),
+      ctx.env.DB.prepare('DELETE FROM notifications WHERE topic_id = ?').bind(id),
+      ctx.env.DB.prepare('UPDATE users SET topic_count = MAX(topic_count - 1, 0), post_count = MAX(post_count - 1, 0) WHERE id = ?').bind(topic.author_id),
+      ctx.env.DB.prepare('UPDATE categories SET topic_count = MAX(topic_count - 1, 0), post_count = MAX(post_count - ? , 0) WHERE id = ?').bind(topic.reply_count + 1, topic.category_id),
+      ctx.env.DB.prepare('DELETE FROM topics WHERE id = ?').bind(id),
+    ]);
+    await logAudit(ctx.env, { actorId: ctx.user!.id, action: 'topic.delete', targetType: 'topic', targetId: id, detail: String(topic.title).slice(0, 60) });
+
+    const back = `/admin/topics?tab=topics${ctx.form?.get('q') ? `&q=${encodeURIComponent(String(ctx.form.get('q')))}` : ''}${ctx.form?.get('status') ? `&status=${encodeURIComponent(String(ctx.form.get('status')))}` : ''}`;
+    return ctx.redirect(back, 'admin.topicDeleted');
+  }
+
+  const sql: Record<string, string> = {
+    pin: 'UPDATE topics SET is_pinned = 1, updated_at = ? WHERE id = ?',
+    unpin: 'UPDATE topics SET is_pinned = 0, updated_at = ? WHERE id = ?',
+    lock: 'UPDATE topics SET is_locked = 1, updated_at = ? WHERE id = ?',
+    unlock: 'UPDATE topics SET is_locked = 0, updated_at = ? WHERE id = ?',
+    feature: 'UPDATE topics SET is_featured = 1 - is_featured, updated_at = ? WHERE id = ?',
+  };
+  if (!id || !sql[action]) return ctx.html(errorPage(ctx, 400, ctx.t('error.badRequest')), 400);
+  await ctx.env.DB.prepare(sql[action]).bind(now, id).run();
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: `topic.${action}`, targetType: 'topic', targetId: id });
+
+  const back = `/admin/topics?tab=topics${ctx.form?.get('q') ? `&q=${encodeURIComponent(String(ctx.form.get('q')))}` : ''}${ctx.form?.get('status') ? `&status=${encodeURIComponent(String(ctx.form.get('status')))}` : ''}`;
+  return ctx.redirect(back, 'admin.saved');
+});
+
+post('/admin/posts/:id/delete', async (ctx) => {
+  const denied = guard(ctx);
+  if (denied) return denied;
+  const id = parseIntParam(ctx.params.id, 0);
+  const target = await ctx.env.DB.prepare('SELECT id, topic_id, author_id FROM posts WHERE id = ?').bind(id).first<any>();
+  if (!target) return ctx.html(errorPage(ctx, 404), 404);
+
+  // 硬删除回复：FTS 由 DELETE 触发器清理
+  await ctx.env.DB.batch([
+    ctx.env.DB.prepare('DELETE FROM likes WHERE target_type = \'post\' AND target_id = ?').bind(id),
+    ctx.env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(id),
+    ctx.env.DB.prepare('UPDATE topics SET reply_count = MAX(reply_count - 1, 0) WHERE id = ?').bind(target.topic_id),
+    ctx.env.DB.prepare('UPDATE users SET post_count = MAX(post_count - 1, 0) WHERE id = ?').bind(target.author_id),
+  ]);
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: 'post.delete', targetType: 'post', targetId: id });
+  return ctx.redirect('/admin/topics?tab=replies', 'admin.replyDeleted');
+});
+
+get('/admin/audit', async (ctx) => {
+  const denied = guard(ctx, true);
+  if (denied) return denied;
+  const logs = await listAuditLogs(ctx.env, 150);
+  return ctx.html(adminAudit(ctx, logs));
 });
 
 get('/admin/reports', async (ctx) => {
@@ -212,6 +403,7 @@ post('/admin/reports/:id', async (ctx) => {
   await ctx.env.DB.prepare('UPDATE reports SET status = ?, resolved_by = ?, resolved_at = ? WHERE id = ?')
     .bind(status, ctx.user!.id, Date.now(), id)
     .run();
+  await logAudit(ctx.env, { actorId: ctx.user!.id, action: `report.${status}`, targetType: 'report', targetId: id });
   return ctx.redirect('/admin/reports', status === 'resolved' ? 'admin.reportResolved' : 'admin.reportDismissed');
 });
 

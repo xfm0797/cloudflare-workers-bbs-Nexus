@@ -4,6 +4,7 @@ import {
   getUserByUsername,
   likesReceived,
   listTopics,
+  topicsMentioning,
   topicsRepliedBy,
 } from '../lib/db';
 import { bookmarksPage, errorPage, notificationsPage, profilePage, settingsPage } from '../views/pages';
@@ -23,11 +24,14 @@ get('/u/:username', async (ctx) => {
   const profile = await getUserByUsername(ctx.env, ctx.params.username);
   if (!profile) return ctx.html(errorPage(ctx, 404, ctx.t('user.notFound')), 404);
 
-  const tab = ctx.query.get('tab') === 'replies' ? 'replies' : 'topics';
+  const tabRaw = ctx.query.get('tab') || 'topics';
+  const tab = ['replies', 'mentions'].includes(tabRaw) ? tabRaw : 'topics';
   const [topics, likes] = await Promise.all([
     tab === 'replies'
       ? topicsRepliedBy(ctx.env, profile.id, 30)
-      : listTopics(ctx.env, { authorId: profile.id, sort: 'latest', perPage: 30 }).then((r) => r.topics),
+      : tab === 'mentions'
+        ? topicsMentioning(ctx.env, profile.username, profile.id, 30)
+        : listTopics(ctx.env, { authorId: profile.id, sort: 'latest', perPage: 30 }).then((r) => r.topics),
     likesReceived(ctx.env, profile.id),
   ]);
 
