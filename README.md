@@ -145,7 +145,7 @@ REQUIRE_EMAIL_VERIFICATION = "true"           # true = 未验证不能发帖 / �
 
 ## 全文搜索（FTS5）
 
-搜索走 D1 内置的 FTS5 虚拟表（`migrations/0003_search_fts.sql`），索引主题标题 / 摘要 / 标签与**回复正文**：
+搜索走 D1 内置的 FTS5 虚拟表（见 `migrations/0000_init.sql`），索引主题标题 / 摘要 / 标签与**回复正文**：
 
 - `trigram` 分词：不依赖中文词典，中英文都按子串匹配，`snippet()` 直接给出命中片段并高亮
 - `bm25` 相关度排序，标题权重 8、正文权重 1
@@ -268,7 +268,7 @@ src/
 ├── routes/             # home / topic / auth / user / admin / api / feeds
 └── views/              # layout（壳 + 侧栏）、pages、admin、ui（图标/头像/分页）
 public/                 # app.css、app.js、favicon.svg（Workers Assets）
-migrations/0001_init.sql
+migrations/0000_init.sql   # 全量初始化（含邮箱验证 / FTS / 私信 / 审计与禁言）
 seed.sql                # 6 个初始板块
 ```
 
