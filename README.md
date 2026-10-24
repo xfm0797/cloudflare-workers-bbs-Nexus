@@ -1,5 +1,7 @@
 # cf-bbs · Nexus
 
+[中文](README.md) | [English](README.en.md)
+
 一个可以直接跑在 **Cloudflare Workers + D1** 上的轻量社区论坛。SSR 渲染、零运行时依赖、内置多语言与多平台 OAuth 登录。
 
 ```bash
@@ -29,7 +31,7 @@ npm run dev                            # http://localhost:8787
 
 **轻量 · 高性能**
 
-- 单个 Worker、零运行时依赖（不引入 Hono/React/ORM），全部逻辑约 5k 行 TypeScript
+- 单个 Worker、零运行时依赖（不引入 Hono/React/ORM），全部逻辑约 6k 行 TypeScript
 - 服务端直出 HTML，首屏无 JS 依赖；CSS/JS 由 Workers Static Assets 直接返回，不消耗 Worker 调用
 - 页面级 SQL 都走索引，列表分页、计数、关系数据一次查询完成；写操作使用 `DB.batch()` 保证一致性
 - 点赞 / 收藏 / 回复预览为渐进增强：没有 JS 也能用（表单回退）
@@ -37,10 +39,15 @@ npm run dev                            # http://localhost:8787
 **功能**
 
 - 板块、主题、楼层回复、Markdown（代码块 / 引用 / 列表 / 图片 / @提及）
+- **私信**：用户间点对点会话，气泡式界面、未读角标、打开即已读，封禁/禁言用户不可收发
+- **标签系统**：发帖打标签，`/tags` 标签云 + `/tags/:name` 单标签主题列表
+- **提及页**：个人主页 `?tab=mentions` 聚合被 @ 的主题；@某人自动发通知
+- **草稿**：发帖、回复、私信内容自动保存到本地，误关页面不丢内容
 - 点赞、收藏、通知（回复 / 提及）、举报与版务处理
 - 角色：成员 / 版主 / 管理员；置顶、加精、锁定、删除
+- **用户禁言**：管理员可禁言 1 小时 ~ 30 天，禁言期间无法发帖、回复、发私信，到期自动恢复
 - 搜索、用户主页、个人设置、密码修改、账号绑定
-- 管理后台：概览指标、用户管理、板块 CRUD、举报队列、站点设置（站名 / 公告 / 关闭注册）
+- 管理后台：概览指标、用户管理（角色/封禁/禁言）、**帖子管理（主题+回复，硬删除）**、板块 CRUD、举报队列、**审计日志**、站点设置（站名 / 公告 / 关闭注册）
 - RSS、sitemap.xml、robots.txt、OG 标签、canonical
 - 亮色 / 暗色 / 跟随系统，响应式（移动端底部导航化）
 
@@ -51,7 +58,7 @@ npm run dev                            # http://localhost:8787
 - CSRF：双提交 Cookie + 表单隐藏域 / `X-CSRF-Token`，常量时间比较
 - XSS：Markdown 先整体转义再生成标签，链接仅允许 `http(s)` 与站内路径
 - 响应头：CSP、X-Frame-Options、nosniff、Referrer-Policy、HSTS、Permissions-Policy
-- 限流：登录/注册、发帖、API 三档内存限流（可在控制台叠加 WAF Rate Limiting）
+- 限流：登录/注册、发帖、私信、API 多档限流（可在控制台叠加 WAF Rate Limiting）
 
 **国际化**
 
@@ -132,7 +139,7 @@ npx wrangler secret put MAIL_REPLY_TO
 `wrangler.toml` 里控制行为：
 
 ```toml
-SITE_URL = "https://forum.lovou.pw"          # 邮件链接前缀，自定义域必填
+SITE_URL = "https://forum.lovou.pw"           # 邮件链接前缀，自定义域必填
 REQUIRE_EMAIL_VERIFICATION = "true"           # true = 未验证不能发帖 / 回复
 ```
 
@@ -145,12 +152,12 @@ REQUIRE_EMAIL_VERIFICATION = "true"           # true = 未验证不能发帖 / �
 
 ## 全文搜索（FTS5）
 
-搜索走 D1 内置的 FTS5 虚拟表（见 `migrations/0000_init.sql`），索引主题标题 / 摘要 / 标签与**回复正文**：
+搜索走 D1 内置的 FTS5 虚拟表（定义在 `migrations/0000_init.sql`），索引主题标题 / 摘要 / 标签与**回复正文**：
 
 - `trigram` 分词：不依赖中文词典，中英文都按子串匹配，`snippet()` 直接给出命中片段并高亮
 - `bm25` 相关度排序，标题权重 8、正文权重 1
 - 查询词短于 3 字符（如中文两字词）时自动回退 `LIKE`；索引异常同样回退，不会因为搜索报 500
-- 触发器维护索引：主题新增/改标题/软删除/恢复、回复新增/编辑/软删除都会同步；软删除的主题连同其回复一起从索引移除
+- 触发器维护索引：主题新增/改标题/软删除/恢复、回复新增/编辑/软删除/硬删除都会同步
 
 重建索引（批量导入数据后、或怀疑索引不一致时）：
 
@@ -260,32 +267,35 @@ src/
 ├── lib/
 │   ├── auth.ts         # 会话签名、PBKDF2、CSRF、OAuth state
 │   ├── oauth.ts        # 6 个 Provider 的授权/换取/资料拉取
-│   ├── db.ts           # 全部 SQL 与领域操作（主题、回复、通知、统计…）
+│   ├── db.ts           # 全部 SQL 与领域操作（主题、回复、私信、审计、统计…）
 │   ├── markdown.ts     # 安全 Markdown → HTML
 │   ├── i18n.ts         # 中英词条、相对时间、日期格式化
 │   ├── utils.ts        # Cookie、编码、限流、摘要
 │   └── types.ts        # 数据模型
-├── routes/             # home / topic / auth / user / admin / api / feeds
-└── views/              # layout（壳 + 侧栏）、pages、admin、ui（图标/头像/分页）
+├── routes/             # home / topic / auth / user / messages / tags / admin / api / feeds
+└── views/              # layout（壳 + 侧栏）、pages、admin、messages、tags、ui（图标/头像/分页）
 public/                 # app.css、app.js、favicon.svg（Workers Assets）
-migrations/0000_init.sql   # 全量初始化（含邮箱验证 / FTS / 私信 / 审计与禁言）
+migrations/0000_init.sql # 全量初始化（含邮箱验证 / FTS / 私信 / 审计与禁言）
 seed.sql                # 6 个初始板块
 ```
 
 ## 数据模型
 
-`users` `oauth_accounts` `categories` `topics` `posts` `likes` `bookmarks` `notifications` `reports` `settings`
+`users` `oauth_accounts` `email_tokens` `categories` `topics` `posts` `likes` `bookmarks` `notifications` `reports` `conversations` `messages` `audit_logs` `settings`
 
-- 所有内容软删除（`is_deleted`），便于审计与恢复
+- 内容软删除（`is_deleted`）供前台作者自删与审计；后台版务删除为**硬删除**，连同回复、点赞、收藏、通知一并清理并回收计数
 - `topics.reply_count / like_count / views` 与 `categories.*_count` 为冗余计数，写入时同批更新，保证列表查询零 JOIN 聚合
 - 用户名/邮箱通过 `lower()` 唯一索引实现大小写不敏感唯一
+- 私信会话每对用户仅一条（双方 id 字典序定列），未读计数分列维护
 
 ## 运营相关
 
 - 首个注册用户（或 `/setup` 创建的账号）自动成为管理员
 - 关闭注册：后台「站点设置」或 `ALLOW_REGISTRATION=false`
+- 后台「帖子」：主题/回复双视图，搜索、状态筛选，置顶 / 锁定 / 加精，删除为硬删除（不可恢复，操作前请确认）
+- 后台「审计日志」：角色调整、封禁/禁言、版务操作、板块增删改、举报处理全量留痕（仅管理员可见）
+- 禁言：后台用户列表操作菜单中选择时长（1h / 24h / 7d / 30d），到期自动解除
 - 举报入口在每条回复的操作区，处理结果在「后台 → 举报」
-- 版主只能处理举报与内容版务；用户/板块/站点设置仅管理员可见
 
 ## 防爬虫与额度保护
 
